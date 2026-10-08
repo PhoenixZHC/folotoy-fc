@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.16)
+set(PROJECT_VER "1.0")
+include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+project(FoloToy-FC)
+spiffs_create_partition_image(saves assets/initial_saves)

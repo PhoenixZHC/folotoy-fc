@@ -1,0 +1,402 @@
+#include "gb_storage.h"
+#include "gb_name.h"
+#include "fc_rom.h"
+
+#include <string.h>
+#include <stdlib.h>
+#include "esp_log.h"
+#include "esp_partition.h"
+#include "mbedtls/sha256.h"
+
+#define DIRECTORY_SECTORS 2
+#define SECTOR_BYTES 4096u
+#define ROM_BANK_BYTES 4096u
+
+typedef struct {
+    char magic[4];
+    uint32_t generation;
+    uint16_t count;
+    uint16_t reserved;
+    gb_rom_entry_t entries[GB_STORAGE_MAX_ROMS];
+    uint8_t digest[32];
+} directory_t;
+
+typedef struct __attribute__((packed)) {
+    char magic[4];
+    uint16_t version;
+    uint16_t count;
+} rom_header_t;
+
+_Static_assert(sizeof(gb_rom_entry_t) == 72, "ROM entry layout changed");
+
+static const esp_partition_t *s_partition;
+static const char *TAG = "gb_storage";
+static gb_rom_entry_t s_entries[GB_STORAGE_MAX_ROMS];
+static size_t s_count;
+static const gb_rom_entry_t *s_selected;
+static bool s_mapped;
+static esp_partition_mmap_handle_t s_mapped_handle;
+static int s_directory_slot = -1;
+static uint32_t s_generation;
+static bool s_catalog_trusted;
+static bool s_needs_reload;
+static bool s_directory_read_error;
+
+static uint32_t data_end(void) {
+    return s_partition->size - DIRECTORY_SECTORS * SECTOR_BYTES;
+}
+
+static void unmap_selected(void) {
+    if (s_mapped) {
+        esp_partition_munmap(s_mapped_handle);
+        s_mapped = false;
+    }
+    s_selected = NULL;
+}
+
+static bool valid_range(uint32_t length, uint32_t offset, uint32_t bytes) {
+    return offset <= length && bytes <= length - offset;
+}
+
+static bool entries_valid(const gb_rom_entry_t *entries, size_t count, uint32_t end) {
+    if (count > GB_STORAGE_MAX_ROMS) return false;
+    for (size_t i = 0; i < count; i++) {
+        const gb_rom_entry_t *entry = &entries[i];
+        if (!gb_name_valid(entry->name) ||
+            entry->offset % SECTOR_BYTES || entry->offset < SECTOR_BYTES ||
+            entry->size < 16400 ||
+            !valid_range(end, entry->offset, fc_rom_allocation(entry->size))) return false;
+        for (size_t j = 0; j < i; j++) {
+            const gb_rom_entry_t *other = &entries[j];
+            if (!strcmp(entry->name, other->name) ||
+                (entry->offset < other->offset + fc_rom_allocation(other->size) &&
+                 other->offset < entry->offset + fc_rom_allocation(entry->size))) return false;
+        }
+    }
+    return true;
+}
+
+static bool read_directory(int slot, directory_t *out) {
+    uint32_t offset = data_end() + (uint32_t)slot * SECTOR_BYTES;
+    if (esp_partition_read(s_partition, offset, out, sizeof(*out)) != ESP_OK) {
+        s_directory_read_error = true;
+        return false;
+    }
+    if (memcmp(out->magic, "FFC2", 4) ||
+        !entries_valid(out->entries, out->count, data_end())) return false;
+    uint8_t digest[32];
+    if (mbedtls_sha256((const unsigned char *)out,
+                       offsetof(directory_t, digest), digest, 0) != 0) return false;
+    return memcmp(digest, out->digest, sizeof(digest)) == 0;
+}
+
+bool gb_storage_init(void) {
+    unmap_selected();
+    s_count = 0;
+    s_catalog_trusted = false;
+    s_needs_reload = true;
+    s_directory_read_error = false;
+    s_directory_slot = -1;
+    s_generation = 0;
+    s_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
+                                            (esp_partition_subtype_t)0x40, "roms");
+    if (!s_partition) return false;
+    directory_t *dir = malloc(sizeof(*dir));
+    if (!dir) return false;
+    for (int slot = 0; slot < DIRECTORY_SECTORS; slot++) {
+        if (read_directory(slot, dir) &&
+            (s_directory_slot < 0 || (int32_t)(dir->generation - s_generation) > 0)) {
+            s_directory_slot = slot;
+            s_generation = dir->generation;
+            s_count = dir->count;
+            memcpy(s_entries, dir->entries, s_count * sizeof(gb_rom_entry_t));
+        }
+    }
+    free(dir);
+    // A read error could hide a newer committed slot. Do not select an older one.
+    if (s_directory_read_error) { s_count = 0; return false; }
+    if (s_directory_slot >= 0) {
+        s_catalog_trusted = true;
+        s_needs_reload = false;
+        return true;
+    }
+    rom_header_t header;
+    if (esp_partition_read(s_partition, 0, &header, sizeof(header)) != ESP_OK) return false;
+    if (memcmp(header.magic, "FFCR", 4) != 0 || header.version != 1 ||
+        header.count == 0 || header.count > GB_STORAGE_MAX_ROMS) {
+        s_needs_reload = false;
+        return true;
+    }
+    size_t table_bytes = header.count * sizeof(gb_rom_entry_t);
+    if (!valid_range(s_partition->size, sizeof(header), table_bytes) ||
+        esp_partition_read(s_partition, sizeof(header), s_entries, table_bytes) != ESP_OK)
+        return false;
+    if (!entries_valid(s_entries, header.count, data_end())) return false;
+    s_count = header.count;
+    s_catalog_trusted = true;
+    s_needs_reload = false;
+    return true;
+}
+
+bool gb_storage_catalog_trusted(void) { return s_catalog_trusted; }
+bool gb_storage_needs_reload(void) { return s_needs_reload; }
+
+bool gb_storage_token(size_t index, char out[GB_STORAGE_TOKEN_BYTES]) {
+    if (!out || s_needs_reload || index >= s_count) return false;
+    uint8_t digest[32];
+    mbedtls_sha256_context sha;
+    mbedtls_sha256_init(&sha);
+    uint32_t row = (uint32_t)index;
+    bool ok = mbedtls_sha256_starts(&sha, 0) == 0 &&
+        mbedtls_sha256_update(&sha, (const unsigned char *)&s_generation, sizeof(s_generation)) == 0 &&
+        mbedtls_sha256_update(&sha, (const unsigned char *)&row, sizeof(row)) == 0 &&
+        mbedtls_sha256_update(&sha, (const unsigned char *)&s_entries[index], sizeof(s_entries[index])) == 0 &&
+        mbedtls_sha256_finish(&sha, digest) == 0;
+    mbedtls_sha256_free(&sha);
+    if (!ok) return false;
+    const char hex[] = "0123456789abcdef";
+    for (size_t i = 0; i < sizeof(digest); i++) {
+        out[2 * i] = hex[digest[i] >> 4];
+        out[2 * i + 1] = hex[digest[i] & 15];
+    }
+    out[64] = 0;
+    return true;
+}
+
+bool gb_storage_resolve_token(const char *token, size_t *index) {
+    if (!token || !index || strlen(token) != GB_STORAGE_TOKEN_BYTES - 1 || s_needs_reload)
+        return false;
+    for (size_t i = 0; i < s_count; i++) {
+        char expected[GB_STORAGE_TOKEN_BYTES];
+        if (gb_storage_token(i, expected) && !strcmp(token, expected)) {
+            *index = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+size_t gb_storage_count(void) { return s_count; }
+
+const gb_rom_entry_t *gb_storage_entry(size_t index) {
+    return index < s_count ? &s_entries[index] : NULL;
+}
+
+static bool read_selected(void *context, uint32_t offset, void *dst, size_t bytes) {
+    const gb_rom_entry_t *entry = (const gb_rom_entry_t *)context;
+    return s_partition && entry && dst &&
+           valid_range(entry->size, offset, bytes) &&
+           esp_partition_read(s_partition, entry->offset + offset, dst, bytes) == ESP_OK;
+}
+
+bool gb_storage_open(size_t index, gb_rom_source_t *out) {
+    if (out) memset(out, 0, sizeof(*out));
+    if (!out || s_needs_reload || index >= s_count) return false;
+    const gb_rom_entry_t *entry = &s_entries[index];
+    uint8_t buffer[1024];
+    uint8_t digest[32];
+    mbedtls_sha256_context sha;
+    mbedtls_sha256_init(&sha);
+    int err = mbedtls_sha256_starts(&sha, 0);
+    for (uint32_t offset = 0; err == 0 && offset < entry->size; offset += sizeof(buffer)) {
+        size_t bytes = entry->size - offset;
+        if (bytes > sizeof(buffer)) bytes = sizeof(buffer);
+        if (!read_selected((void *)entry, offset, buffer, bytes)) { err = -1; break; }
+        err = mbedtls_sha256_update(&sha, buffer, bytes);
+    }
+    if (err == 0) err = mbedtls_sha256_finish(&sha, digest);
+    mbedtls_sha256_free(&sha);
+    if (err != 0 || memcmp(digest, entry->sha256, sizeof(digest)) != 0) return false;
+    unmap_selected();
+    const void *mapped = NULL;
+    if (entry->size >= 16400) {
+        esp_err_t map_err = esp_partition_mmap(s_partition, entry->offset, entry->size,
+                                                ESP_PARTITION_MMAP_DATA,
+                                                &mapped, &s_mapped_handle);
+        if (map_err == ESP_OK) {
+            s_mapped = true;
+            ESP_LOGI(TAG, "ROM mapped directly from Flash: %lu bytes",
+                     (unsigned long)entry->size);
+        } else {
+            ESP_LOGE(TAG, "ROM mapping failed (%s)", esp_err_to_name(map_err));
+            return false;
+        }
+    }
+    s_selected = entry;
+    *out = (gb_rom_source_t){.read = read_selected,
+                             .context = (void *)s_selected,
+                             .size = entry->size,
+                             .mapped = (const uint8_t *)mapped};
+    return true;
+}
+
+static uint32_t find_gap(uint32_t bytes) {
+    uint32_t candidate = SECTOR_BYTES;
+    while (candidate + bytes <= data_end()) {
+        bool occupied = false;
+        uint32_t next = candidate;
+        for (size_t i = 0; i < s_count; i++) {
+            const gb_rom_entry_t *entry = &s_entries[i];
+            if (candidate < entry->offset + fc_rom_allocation(entry->size) &&
+                entry->offset < candidate + bytes) {
+                occupied = true;
+                if (entry->offset + fc_rom_allocation(entry->size) > next) next = entry->offset + fc_rom_allocation(entry->size);
+            }
+        }
+        if (!occupied) return candidate;
+        candidate = next;
+    }
+    return 0;
+}
+
+size_t gb_storage_limit(void) {
+    if (!s_partition || s_partition->size <= (DIRECTORY_SECTORS + 1) * SECTOR_BYTES)
+        return 0;
+    size_t capacity = s_partition->size - (DIRECTORY_SECTORS + 1) * SECTOR_BYTES;
+    return capacity / ROM_BANK_BYTES * ROM_BANK_BYTES;
+}
+
+size_t gb_storage_used(void) {
+    size_t used = 0;
+    for (size_t i = 0; i < s_count; i++) used += fc_rom_allocation(s_entries[i].size);
+    return used;
+}
+
+size_t gb_storage_free_bytes(void) {
+    if (!s_partition) return 0;
+    size_t capacity = data_end() - SECTOR_BYTES;
+    size_t used = gb_storage_used();
+    return used <= capacity ? capacity - used : 0;
+}
+
+size_t gb_storage_available(void) {
+    if (!s_partition) return 0;
+    size_t used = gb_storage_used();
+    size_t limit = gb_storage_limit();
+    if (used >= limit) return 0;
+    uint32_t best = 0;
+    for (uint32_t from = SECTOR_BYTES; from < data_end();) {
+        uint32_t to = data_end();
+        for (size_t i = 0; i < s_count; i++) {
+            const gb_rom_entry_t *entry = &s_entries[i];
+            if (from >= entry->offset && from < entry->offset + fc_rom_allocation(entry->size)) {
+                from = entry->offset + fc_rom_allocation(entry->size);
+                to = 0;
+                break;
+            }
+            if (entry->offset > from && entry->offset < to) to = entry->offset;
+        }
+        if (!to) continue;
+        if (to - from > best) best = to - from;
+        from = to == data_end() ? data_end() : to;
+    }
+    size_t quota_left = limit - used;
+    size_t available = best < quota_left ? best : quota_left;
+    available = available / ROM_BANK_BYTES * ROM_BANK_BYTES;
+    return available >= 20480 ? available : 0;
+}
+
+static bool publish_directory(const gb_rom_entry_t *entries, size_t count) {
+    // Both buffers must exist before erasing or committing a directory slot.
+    directory_t *dir = calloc(2, sizeof(*dir));
+    if (!dir) return false;
+    directory_t *verify = dir + 1;
+    memcpy(dir->magic, "FFC2", 4);
+    dir->generation = s_generation + 1;
+    dir->count = count;
+    memcpy(dir->entries, entries, count * sizeof(*entries));
+    bool success = mbedtls_sha256((const unsigned char *)dir,
+                                  offsetof(directory_t, digest), dir->digest, 0) == 0;
+    int slot = s_directory_slot == 0 ? 1 : 0;
+    uint32_t offset = data_end() + (uint32_t)slot * SECTOR_BYTES;
+    if (success) success = esp_partition_erase_range(s_partition, offset, SECTOR_BYTES) == ESP_OK;
+    if (success) {
+        // Even a failed write may have reached Flash. Fail closed until reload
+        // instead of using stale RAM to overwrite a potentially committed ROM.
+        s_needs_reload = true;
+        s_catalog_trusted = false;
+        success = esp_partition_write(s_partition, offset, dir, sizeof(*dir)) == ESP_OK;
+    }
+    if (success) success = read_directory(slot, verify) &&
+        !memcmp(verify, dir, sizeof(*dir));
+    if (success) {
+        memcpy(s_entries, entries, count * sizeof(*entries));
+        s_count = count;
+        s_generation = dir->generation;
+        s_directory_slot = slot;
+        s_catalog_trusted = true;
+        s_needs_reload = false;
+    }
+    free(dir);
+    return success;
+}
+
+static bool valid_name(const char *name, size_t except) {
+    if (!gb_name_valid(name)) return false;
+    for (size_t i = 0; i < s_count; i++)
+        if (i != except && !strcmp(name, s_entries[i].name)) return false;
+    return true;
+}
+
+bool gb_storage_upload(const char *name, size_t bytes,
+                       gb_storage_reader_t reader, void *context) {
+    if (!s_partition || s_needs_reload || !reader || !valid_name(name, SIZE_MAX) || s_count >= GB_STORAGE_MAX_ROMS ||
+        bytes < 16400 || bytes > gb_storage_limit() ||
+        fc_rom_allocation(bytes) > gb_storage_available()) return false;
+    uint32_t offset = find_gap((uint32_t)fc_rom_allocation(bytes));
+    if (!offset) return false;
+    unmap_selected();
+    if (esp_partition_erase_range(s_partition, offset, fc_rom_allocation(bytes)) != ESP_OK) return false;
+    uint8_t buffer[1024], header[16] = {0}, digest[32];
+    mbedtls_sha256_context sha;
+    mbedtls_sha256_init(&sha);
+    bool ok = mbedtls_sha256_starts(&sha, 0) == 0;
+    for (size_t written = 0; ok && written < bytes;) {
+        size_t want = bytes - written;
+        if (want > sizeof(buffer)) want = sizeof(buffer);
+        int got = reader(context, buffer, want);
+        if (got <= 0 || (size_t)got > want) { ok = false; break; }
+        if (written < sizeof(header)) {
+            size_t copy = sizeof(header) - written;
+            if (copy > (size_t)got) copy = (size_t)got;
+            memcpy(header + written, buffer, copy);
+        }
+        ok = esp_partition_write(s_partition, offset + written, buffer, got) == ESP_OK &&
+             mbedtls_sha256_update(&sha, buffer, got) == 0;
+        written += got;
+    }
+    if (ok) ok = mbedtls_sha256_finish(&sha, digest) == 0;
+    mbedtls_sha256_free(&sha);
+    fc_rom_info_t info;
+    if (!ok || !fc_rom_parse(header, sizeof(header), bytes, &info)) return false;
+    gb_rom_entry_t updated[GB_STORAGE_MAX_ROMS];
+    memcpy(updated, s_entries, s_count * sizeof(*updated));
+    gb_rom_entry_t *entry = &updated[s_count];
+    memset(entry, 0, sizeof(*entry));
+    strcpy(entry->name, name);
+    entry->offset = offset;
+    entry->size = bytes;
+    memcpy(entry->sha256, digest, sizeof(digest));
+    return publish_directory(updated, s_count + 1);
+}
+
+bool gb_storage_delete(size_t index) {
+    if (!s_partition || s_needs_reload || index >= s_count) return false;
+    unmap_selected();
+    gb_rom_entry_t updated[GB_STORAGE_MAX_ROMS];
+    memcpy(updated, s_entries, s_count * sizeof(*updated));
+    memmove(&updated[index], &updated[index + 1],
+            (s_count - index - 1) * sizeof(*updated));
+    return publish_directory(updated, s_count - 1);
+}
+
+bool gb_storage_rename(size_t index, const char *name) {
+    if (!s_partition || s_needs_reload || index >= s_count || !valid_name(name, index)) return false;
+    if (!strcmp(s_entries[index].name, name)) return true;
+    unmap_selected();
+    gb_rom_entry_t updated[GB_STORAGE_MAX_ROMS];
+    memcpy(updated, s_entries, s_count * sizeof(*updated));
+    memset(updated[index].name, 0, sizeof(updated[index].name));
+    strcpy(updated[index].name, name);
+    return publish_directory(updated, s_count);
+}
