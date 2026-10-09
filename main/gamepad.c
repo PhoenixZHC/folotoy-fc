@@ -6,6 +6,7 @@
 #include "btstack.h"
 #include "btstack_run_loop.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "uni.h"
@@ -14,6 +15,16 @@
 static const char *TAG = "gamepad";
 static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
 static pad_sample_t s_sample;
+static gb_input_buffer_t s_input_buffer;
+#ifdef FC_INPUT_TRACE
+static unsigned trace_bits(pad_sample_t p) {
+    return (p.right ? 1u : 0) | (p.left ? 2u : 0) |
+           (p.up ? 4u : 0) | (p.down ? 8u : 0) |
+           (p.a ? 16u : 0) | (p.b ? 32u : 0) |
+           (p.view ? 64u : 0) | (p.menu ? 128u : 0);
+}
+static uint32_t s_trace_reports, s_trace_direction_a;
+#endif
 static gamepad_discovery_t s_discovery;
 static uni_hid_device_t *s_owner;
 static bool s_started;
@@ -75,6 +86,11 @@ static void update_scan_policy(void) {
 static void set_sample(pad_sample_t sample) {
     taskENTER_CRITICAL(&s_lock);
     s_sample = sample;
+#ifdef FC_INPUT_TRACE
+    s_trace_reports++;
+    if ((sample.left || sample.right) && sample.a) s_trace_direction_a++;
+#endif
+    gb_input_buffer_push(&s_input_buffer, sample, esp_timer_get_time());
     taskEXIT_CRITICAL(&s_lock);
 }
 
@@ -82,6 +98,45 @@ pad_sample_t gamepad_snapshot(void) {
     taskENTER_CRITICAL(&s_lock);
     pad_sample_t copy = s_sample;
     taskEXIT_CRITICAL(&s_lock);
+    return copy;
+}
+
+void gamepad_set_gameplay(bool enabled) {
+    taskENTER_CRITICAL(&s_lock);
+    gb_input_buffer_reset(&s_input_buffer, s_sample, enabled);
+    taskEXIT_CRITICAL(&s_lock);
+}
+
+pad_sample_t gamepad_frame_snapshot(void) {
+    static uint32_t reported_drops;
+    taskENTER_CRITICAL(&s_lock);
+    pad_sample_t copy = gb_input_buffer_take(&s_input_buffer, esp_timer_get_time());
+    uint32_t drops = s_input_buffer.dropped;
+#ifdef FC_INPUT_TRACE
+    unsigned live = trace_bits(s_sample), frame = trace_bits(copy);
+    unsigned pending = s_input_buffer.count;
+    bool armed = s_input_buffer.armed;
+    uint32_t reports = s_trace_reports, direction_a = s_trace_direction_a;
+#endif
+    taskEXIT_CRITICAL(&s_lock);
+#ifdef FC_INPUT_TRACE
+    // 仅诊断构建启用，最多输出 240 次变化，避免持续串口输出影响运行。
+    static unsigned previous_live = ~0u, previous_frame = ~0u;
+    static unsigned trace_lines;
+    if (trace_lines < 240 && (live != previous_live || frame != previous_frame)) {
+        ESP_LOGI(TAG, "input_trace live=%02x frame=%02x pending=%u armed=%u reports=%lu direction_a=%lu",
+                 live, frame, pending, (unsigned)armed,
+                 (unsigned long)reports, (unsigned long)direction_a);
+        previous_live = live;
+        previous_frame = frame;
+        trace_lines++;
+    }
+#endif
+    if (drops != reported_drops) {
+        ESP_LOGW(TAG, "input backlog discarded: %lu states (age/capacity limit)",
+                 (unsigned long)(drops - reported_drops));
+        reported_drops = drops;
+    }
     return copy;
 }
 
@@ -243,6 +298,7 @@ static void controller_data(uni_hid_device_t *device, uni_controller_t *ctl) {
         .any_button = gp->buttons || gp->misc_buttons || gp->dpad ||
                       gp->brake > 64 || gp->throttle > 64,
     };
+    gb_input_left_stick(&next, gp->axis_x, gp->axis_y);
     set_sample(next);
 }
 

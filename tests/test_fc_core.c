@@ -1,5 +1,6 @@
 #include "gb_port.h"
 #include "fc_rom.h"
+#include "gb_input.h"
 #include "nes/nes.h"
 #include <assert.h>
 #include <stdio.h>
@@ -27,6 +28,21 @@ int main(int argc, char **argv) {
         gb_session_t *s=NULL;
         gb_rom_source_t source={.mapped=rom,.size=(uint32_t)size};
         assert(gb_port_create(&source,&s));
+        // 实际 NES $4016 串行接口应读到方向+A/B组合以及独立松开。
+        gb_input_buffer_t input = {0};
+        gb_input_buffer_reset(&input, (pad_sample_t){.connected=true}, true);
+        const uint8_t chord[] = {0x07,0x0d,0x0e};
+        const uint8_t moving[] = {0x07};
+        gb_input_buffer_push(&input, gb_input_keyboard(chord,3,0), 1000);
+        gb_input_buffer_push(&input, gb_input_keyboard(moving,1,0), 2000);
+        for (int frame=0; frame<2; frame++) {
+            gb_keys_t k=gb_input_map(gb_input_buffer_take(&input,16000*(frame+1)));
+            gb_port_set_keys(s,(gb_port_keys_t){.right=k.right,.a=k.a,.b=k.b});
+            input_write(0x4016,1); input_write(0x4016,0);
+            unsigned bits=0;
+            for (unsigned bit=0; bit<8; bit++) bits|=(input_read(0x4016)&1u)<<bit;
+            assert(bits==(unsigned)(NES_PAD_RIGHT | (frame==0 ? NES_PAD_A|NES_PAD_B : 0)));
+        }
         // 未写 PPUCTRL 就载入显存时，每次 PPUDATA 写入仍必须递增地址。
         ppu_write(0x2001,0);
         ppu_write(0x2006,0x20); ppu_write(0x2006,0);

@@ -9,4 +9,5 @@
 - ESP-IDF 及托管组件保留各自版权声明和许可，版本锁定在 `dependencies.lock`。
 - [PassportSim](https://github.com/BlackHole1/passportsim) v1.0.1 仅作为测试工具，没有链接进固件。Windows 官方包 SHA256：`ed0e8f805125475255b59b7f45df4b5da702d925f062f6701021e6fc72e38904`。
 - `tools/make_diagnostic_rom.py` 生成本项目自有诊断程序。用户提供的游戏 ROM 仅用于本地验证，不纳入默认固件或源码分发。
-- 用户授权的 1.0 / 16 款完整预装包仅在本地交付，ROM 来源和哈希见 selection-full16.json；未上传或公开发布。完整包附本文件和 licenses，未因阶段收尾改变上述许可边界。
+- 用户授权的 1.0、1.1 / 16 款完整预装包仅在本地交付，ROM 来源和哈希见 selection-full16.json；未上传或公开发布。完整包附本文件和 licenses，版本更新不改变上述许可边界。
+- 1.1 BLE 修复来源：2026-10-09 本地 GameBoy 的 `docs/development/ble-input-fc-handoff.zh_CN.md` 及对应工作区代码，逐项合并标准 HID 解析器、描述符/连接恢复/广播/摇杆映射与测试；不宣称这些本地改动已进入上游或远端固定提交。FC 本轮未修改 GameBoy 项目。

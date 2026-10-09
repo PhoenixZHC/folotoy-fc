@@ -274,6 +274,7 @@ static bool screen_off_loop(void) {
 }
 
 static bool pause_game(gb_session_t *session, const uint8_t hash[32], bool connected) {
+    gamepad_set_gameplay(false);
     bool battery = gb_port_has_battery(session);
     const char *items[] = {"继续游戏", battery ? "同步电池存档" : "无电池存档",
                            "设置", "息屏", "退出游戏"};
@@ -474,6 +475,7 @@ static bool play_fc_launch(void) {
 }
 
 static void destroy_game_session(gb_session_t *session) {
+    gamepad_set_gameplay(false);
     esp_err_t e=fc_display_drain();
     if(e!=ESP_OK) ESP_LOGE(TAG,"display drain: %s",esp_err_to_name(e));
     gb_port_destroy(session);
@@ -505,7 +507,6 @@ static void run_game(size_t index) {
     }
     // 动画期间的板载按键不传入游戏，手柄仍需松开启动键。
     xQueueReset(s_buttons);
-    bool launch_input_released = false;
     bool audio_enabled = s_sound_enabled && s_volume > 0;
     if (audio_enabled && !gb_audio_start(s_volume)) {
         destroy_game_session(session); show_error("声音启动失败"); return;
@@ -514,6 +515,7 @@ static void run_game(size_t index) {
         if (audio_enabled) gb_audio_stop();
         destroy_game_session(session); show_error("屏幕传输失败"); return;
     }
+    gamepad_set_gameplay(true);
     int64_t next = esp_timer_get_time();
     int64_t last_save = next;
     int64_t last_report = next;
@@ -534,7 +536,7 @@ static void run_game(size_t index) {
     gb_frame_pacing_init(&pacing);
     while (true) {
         game_button_actions_t board = poll_game_buttons();
-        pad_sample_t pad = gamepad_snapshot();
+        pad_sample_t pad = gamepad_frame_snapshot();
         if (board.pause || !pad.connected) {
             gb_port_set_keys(session, (gb_port_keys_t){0});
             if (audio_enabled && !gb_audio_stop()) {
@@ -549,6 +551,7 @@ static void run_game(size_t index) {
                 if (audio_enabled) gb_audio_stop();
                 destroy_game_session(session); show_error("屏幕传输失败"); return;
             }
+            gamepad_set_gameplay(true);
             next = esp_timer_get_time();
             last_report = next;
             last_display_count = fc_display_completed();
@@ -565,10 +568,7 @@ static void run_game(size_t index) {
 
             continue;
         }
-        // Require release before forwarding the launch press or held animation input.
-        if (!pad.any_button && !pad.right && !pad.left && !pad.up && !pad.down &&
-            !pad.a && !pad.b && !pad.view && !pad.menu) launch_input_released = true;
-        gb_keys_t keys = launch_input_released ? gb_input_map(pad) : (gb_keys_t){0};
+        gb_keys_t keys = gb_input_map(pad);
         keys.start |= board.start;
         keys.select |= board.select;
         gb_port_set_keys(session, port_keys(keys));
@@ -667,6 +667,7 @@ static void run_game(size_t index) {
                     if (audio_enabled) gb_audio_stop();
                     destroy_game_session(session); show_error("屏幕传输失败"); return;
                 }
+                gamepad_set_gameplay(true);
                 next = esp_timer_get_time();
 
 

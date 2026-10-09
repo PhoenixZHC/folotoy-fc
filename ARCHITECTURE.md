@@ -1,6 +1,12 @@
 # 架构
 
+当前交付版本 1.1。本轮仅在已实测 BLE 修复基础上更新固件与网页版本号；核心、显示、音频及分区布局未随版本标记改变，交付见 `docs/release-1.1.md`。
+
 `game_main.c` 负责正式菜单、配对、游戏循环和暂停。`gamepad.c` 通过 Bluepad32/BTstack 提供 BLE 输入，`gb_input.c` 映射 NES 按键。测试构建由 CMake 的 `FC_SIM_TEST` 选择独立 `tests/fc_sim_main.c`，不改变正式入口行为。
+
+BLE 在选择解析器前读取实际 HID 服务描述符；标准 Android/通用/Xbox BLE 配置使用 `uni_hid_parser_standard.c`，最多八个报告分别保存状态并合并，键盘及专有协议保留独立驱动。描述符长度和不支持的布局显式校验；连接失败断开并按扫描策略恢复，旧密钥问题只对该设备重配一次。应用映射左摇杆 X/Y（±160 死区，同轴十字键优先）后再进入短按队列，回中不清除仍按住的 A/B。
+
+BLE 回调在现有临界区内同时更新实时快照和游戏状态队列。菜单调用 `gamepad_snapshot`，游戏每模拟帧调用 `gamepad_frame_snapshot` 消费一次变化；`gb_input.c` 中的纯 C 队列保留完整组合键及松开顺序，重复报告不排队。容量 16、最大年龄 100 ms，超限丢弃整段积压并回到新状态，由游戏任务输出累计差额日志。暂停/退出禁用并清空，断连清空，进入/恢复游戏需先观察到松键后才接收；不以延长所有按键或按位合并来补偿短按。
 
 `fc_rom.c` 验证经典 iNES 头、Mapper、ROM 长度及银行数。`gb_storage.c` 管理 4 MiB Flash 分区：4 KiB 对齐，SHA256、双目录提交及只读 mmap。工厂容器 `FFCR`，可写目录 `FFC2`，均区别于参考 GB 格式。`tools/pack_roms.py` 生成并验证同格式容器。
 
