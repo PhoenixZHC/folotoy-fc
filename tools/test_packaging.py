@@ -2,7 +2,7 @@
 import tempfile,unittest
 from pathlib import Path
 from make_diagnostic_rom import make_rom
-from pack_roms import pack,verify
+from pack_roms import pack,verify,validate_rom
 
 class ContainerTest(unittest.TestCase):
     @classmethod
@@ -20,4 +20,13 @@ class ContainerTest(unittest.TestCase):
         with self.assertRaises(ValueError):pack([self.rom],[])
     def test_truncated_container(self):
         with self.assertRaises(ValueError):verify(pack([self.rom])[:-1])
+    def test_mapper4_one_and_half_mib(self):
+        data=b'NES\x1a'+bytes([96,0,0x42])+bytes(9)+bytes(1572864)
+        self.assertEqual(validate_rom(data),4)
+        rom=self.folder/'large-mmc3.nes';rom.write_bytes(data)
+        self.assertEqual(verify(pack([rom],['large-mmc3'])),['large-mmc3'])
+        with self.assertRaises(ValueError):validate_rom(data[:-1])
+    def test_mapper4_over_one_and_half_mib(self):
+        data=b'NES\x1a'+bytes([97,0,0x42])+bytes(9)+bytes(97*16384)
+        with self.assertRaises(ValueError):validate_rom(data)
 if __name__=='__main__':unittest.main()

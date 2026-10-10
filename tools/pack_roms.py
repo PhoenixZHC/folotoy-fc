@@ -14,7 +14,7 @@ def validate_rom(data):
     if not p or high&15 or any(data[9:16]) or ram>1:
         raise ValueError('Only classic iNES NTSC with <=8 KiB PRG RAM is supported')
     shapes={0: p<=2 and c<=1,1:p<=16 and c<=16,2:2<=p<=16 and c==0,
-            3:p<=2 and 1<=c<=4,4:2<=p<=32 and c<=32,
+            3:p<=2 and 1<=c<=4,4:2<=p<=96 and c<=32,
             7:2<=p<=16 and p%2==0 and c==0,23:2<=p<=32 and 1<=c<=32,
             66:2<=p<=8 and p%2==0 and 1<=c<=4}
     if not shapes.get(mapper,False): raise ValueError(f'Unsupported mapper or bank layout: {mapper}')

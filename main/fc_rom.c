@@ -23,7 +23,7 @@ bool fc_rom_parse(const uint8_t *h, size_t count, size_t size, fc_rom_info_t *ou
     case 1: if (h[4] > 16 || h[5] > 16) return false; break;
     case 2: if (h[4] < 2 || h[4] > 16 || h[5] != 0) return false; break;
     case 3: if (h[4] > 2 || h[5] == 0 || h[5] > 4) return false; break;
-    case 4: if (h[4] < 2 || h[4] > 32 || h[5] > 32) return false; break;
+    case 4: if (h[4] < 2 || h[4] > 96 || h[5] > 32) return false; break;
     case 7: if (h[4] < 2 || h[4] % 2 || h[4] > 16 || h[5]) return false; break;
     case 23: if (h[4] < 2 || h[4] > 32 || h[5] == 0 || h[5] > 32) return false; break;
     case 66: if (h[4] < 2 || h[4] % 2 || h[4] > 8 || h[5] == 0 || h[5] > 4) return false; break;

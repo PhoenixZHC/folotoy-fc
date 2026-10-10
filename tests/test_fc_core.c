@@ -25,6 +25,33 @@ int main(int argc, char **argv) {
     assert(fc_rom_allocation(24592)==28672);
     assert(fc_rom_allocation(SIZE_MAX)==0);
     {
+        // Mapper 4 接受 1.5 MiB PRG，仍拒绝越界容量和截断文件。
+        uint8_t header[16]={'N','E','S',0x1a,96,0,0x42};
+        assert(fc_rom_parse(header,sizeof(header),16+1572864,&info));
+        assert(info.mapper==4 && info.prg_bytes==1572864 && info.chr_bytes==0 && info.battery);
+        assert(!fc_rom_parse(header,sizeof(header),16+1572864-1,&info));
+        header[4]=97;
+        assert(!fc_rom_parse(header,sizeof(header),16+97*16384,&info));
+    }
+    {
+        // 验证上限内高位 PRG 块及倒数两个固定块确实可寻址。
+        size_t large_size=16+1572864;
+        uint8_t *large=calloc(1,large_size); assert(large);
+        memcpy(large,"NES\x1a",4); large[4]=96; large[6]=0x40;
+        for (unsigned bank=0;bank<192;bank++) memset(large+16+bank*8192,bank,8192);
+        gb_session_t *s=NULL;
+        gb_rom_source_t source={.mapped=large,.size=(uint32_t)large_size};
+        assert(gb_port_create(&source,&s));
+        assert(mem_getbyte(0xc000)==190 && mem_getbyte(0xe000)==191);
+        mem_putbyte(0x8000,6); mem_putbyte(0x8001,128);
+        assert(mem_getbyte(0x8000)==128);
+        mem_putbyte(0x8000,7); mem_putbyte(0x8001,191);
+        assert(mem_getbyte(0xa000)==191);
+        mem_putbyte(0x8000,0x46); mem_putbyte(0x8001,189);
+        assert(mem_getbyte(0x8000)==190 && mem_getbyte(0xc000)==189);
+        gb_port_destroy(s); free(large);
+    }
+    {
         gb_session_t *s=NULL;
         gb_rom_source_t source={.mapped=rom,.size=(uint32_t)size};
         assert(gb_port_create(&source,&s));
