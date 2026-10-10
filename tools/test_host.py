@@ -16,6 +16,7 @@ cases=[
  ('fc_saves',['tests/test_fc_saves.c'],[]),
  ('fc_storage',['tests/test_fc_storage.c','main/gb_name.c','main/fc_rom.c'],[]),
  ('fc_core',['tests/test_fc_core.c','main/gb_input.c','main/fc_port.c','main/fc_rom.c',*core_sources],[str(OUT/'diagnostic.nes')]),
+ ('fc_frame_memory',['tests/test_fc_frame_memory.c','main/fc_rom.c',*core_sources],[str(OUT/'diagnostic.nes')]),
  ('gb_input',['tests/test_gb_input.c','main/gb_input.c'],[]),
  ('gb_input_buffer',['tests/test_gb_input_buffer.c','main/gb_input.c'],[]),
  ('gb_name',['tests/test_gb_name.c','main/gb_name.c'],[]),

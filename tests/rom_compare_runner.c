@@ -21,8 +21,8 @@ int main(int argc,char **argv) {
         if(!gb_port_step_frame(s,i%3==0))return 7;
         if(i%3==0) {
             uint32_t frame_hash=2166136261u;
-            const uint8_t *pixels=gb_port_framebuffer(s);
-            for(int y=0;y<240;y++)for(int x=0;x<256;x++)frame_hash=(frame_hash^(pixels[y*272+x+8]&63))*16777619u;
+            uint8_t *const *pixels=gb_port_framebuffer(s);
+            for(int y=0;y<240;y++)for(int x=0;x<256;x++)frame_hash=(frame_hash^(pixels[y][x+8]&63))*16777619u;
             changes+=frame_hash!=previous;previous=frame_hash;
             hash=(hash^frame_hash)*16777619u;
         }

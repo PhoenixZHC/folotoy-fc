@@ -33,7 +33,7 @@ nes_t *nes_getptr(void)
 /* run emulation for one frame */
 void nes_emulate(bool draw)
 {
-    draw = draw && nes.vidbuf != NULL;
+    draw = draw && (nes.vidbuf != NULL || nes.vidrows != NULL);
 
     while (nes.scanline < nes.scanlines_per_frame)
     {
@@ -82,6 +82,7 @@ uint8 *nes_setvidbuf(uint8 *vidbuf)
 {
     uint8 *prevbuf = nes.vidbuf;
     nes.vidbuf = vidbuf;
+    nes.vidrows = NULL;
     return prevbuf;
 }
 

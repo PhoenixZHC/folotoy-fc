@@ -187,7 +187,15 @@ static size_t home_loop(void) {
     }
 }
 
+static void log_management_heap(const char *stage) {
+    ESP_LOGI(TAG, "WIFI_DIAG %s free=%u largest=%u minimum=%u", stage,
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT),
+             (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT));
+}
+
 static void management_loop(void) {
+    log_management_heap("before management");
     gamepad_set_scanning(false);
     vTaskDelay(pdMS_TO_TICKS(100));
     if (s_saves_ready && gb_storage_catalog_trusted() &&
@@ -201,6 +209,7 @@ static void management_loop(void) {
         while (xQueueReceive(s_buttons, &msg, portMAX_DELAY) == pdTRUE)
             if (msg.button == BSP_BTN_OK) return;
     }
+    log_management_heap("web started");
     gb_web_status_t status = gb_web_status();
     // 清除打开此页时残留的 OK 事件；仅长按才退出。
     xQueueReset(s_buttons);
@@ -230,8 +239,11 @@ static void management_loop(void) {
             refreshed = now;
         }
     }
+    log_management_heap("before web stop");
     gb_web_stop();
+    log_management_heap("after web stop");
     gamepad_set_scanning(true);
+    log_management_heap("after scanning resume");
 }
 
 static void show_error(const char *reason) {
@@ -459,18 +471,14 @@ static bool prepare_game_screen(void) {
 
 
 static bool play_fc_launch(void) {
-    uint8_t *frame=malloc(GB_FRAME_BYTES);
-    if(!frame) return false;
     esp_err_t e=gb_display_clear(GB_LCD_LIGHT);
     int64_t started=esp_timer_get_time();
     while(e==ESP_OK) {
         uint32_t elapsed=(uint32_t)((esp_timer_get_time()-started)/1000);
-        fc_launch_frame(frame,elapsed);
-        e=gb_display_boot_frame(frame);
+        e=fc_display_launch_frame(elapsed);
         if(elapsed>=FC_LAUNCH_MS) break;
         vTaskDelay(pdMS_TO_TICKS(40));
     }
-    free(frame);
     return e==ESP_OK;
 }
 
@@ -488,6 +496,10 @@ static void run_game(size_t index) {
     show_ui("加载游戏", "正在检查游戏", loading, 1, 0, "请稍候");
     gb_rom_source_t rom;
     if (!gb_storage_open(index, &rom)) { show_error("游戏文件校验失败"); return; }
+    // I2S DMA/codec 需要先于核心分块分配，尤其是首次直接启动 CHR RAM 游戏。
+    if (!gb_audio_prepare() && s_sound_enabled && s_volume > 0) {
+        show_error("声音初始化失败"); return;
+    }
     gb_session_t *session = NULL;
     if (!gb_port_create(&rom, &session)) { show_error("游戏不支持/内存不足"); return; }
     ESP_LOGI(TAG, "ROM loaded: %.31s", entry->name);
@@ -773,6 +785,53 @@ void app_main(void) {
     else if (s_saves_ready && gb_storage_catalog_trusted() &&
              !gb_saves_prune_orphans()) ESP_LOGE(TAG, "orphan save cleanup failed");
     ESP_LOGI(TAG, "FC_READY version=%s games=%u", esp_app_get_description()->version, (unsigned)gb_storage_count());
+#ifdef FC_WIFI_MEMORY_TEST
+    // 仅专用回归构建启用；不上传、删除 ROM，也不读写游戏存档。
+    gamepad_set_scanning(false);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    bool first_web = gb_web_start();
+    vTaskDelay(pdMS_TO_TICKS(2000));
+    gb_web_stop();
+    gamepad_set_scanning(true);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    ESP_LOGI(TAG, "WIFI_TEST cold_web=%s", first_web ? "PASS" : "FAIL");
+    for (int round = 0; round < 4; round++) {
+        for (size_t position = 0; position < gb_storage_count(); position++) {
+            size_t i = gb_storage_count() - 1 - position;
+            gb_rom_source_t rom;
+            gb_session_t *session = NULL;
+            bool ok = gb_storage_open(i, &rom) && gb_audio_prepare() && gb_port_create(&rom, &session);
+            if (ok) {
+                bool launch = fc_display_launch_frame(0) == ESP_OK &&
+                              fc_display_launch_frame(FC_LAUNCH_MS) == ESP_OK;
+                bool audio = gb_audio_start(0);
+                ok = audio && launch;
+                for (int frame = 0; frame < 8; frame++) {
+                    gb_port_step_frame(session, true);
+                    int16_t samples[267];
+                    size_t count = gb_port_audio_frame(session, samples, 267);
+                    if (audio) gb_audio_submit(samples, count);
+                }
+                if (fc_display_frame(gb_port_framebuffer(session), fc_port_palette(session)) != ESP_OK) ok = false;
+                vTaskDelay(pdMS_TO_TICKS(50));
+                if (audio && !gb_audio_stop()) ok = false;
+                gb_port_destroy(session);
+            }
+            ESP_LOGI(TAG, "WIFI_TEST round=%d game=%u result=%s", round, (unsigned)i, ok ? "PASS" : "FAIL");
+        }
+        if (round == 3) break;
+        gamepad_set_scanning(false);
+        vTaskDelay(pdMS_TO_TICKS(100));
+        bool started = gb_web_start();
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        gb_web_stop();
+        gamepad_set_scanning(true);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        ESP_LOGI(TAG, "WIFI_TEST cycle=%d web=%s", round, started ? "PASS" : "FAIL");
+        log_management_heap("automated cycle complete");
+    }
+    ESP_LOGI(TAG, "WIFI_TEST complete");
+#endif
     while (true) {
         size_t choice = home_loop();
         if (choice == 0 && pairing_loop()) menu_loop();

@@ -1,6 +1,6 @@
 # 架构
 
-当前本地交付版本 1.2。Mapper 4 PRG 上限放宽为 1.5 MiB，固件与打包校验同步；CHR 上限仍 256 KiB。ROM 直接映射 Flash，高位分块寻址已做主机测试；核心算法、显示、音频和分区布局不变。交付见 `docs/release-1.2.md`。
+当前本地交付版本 1.3。Mapper 4 PRG 上限为 1.5 MiB，CHR 上限仍 256 KiB。ROM 直接映射 Flash；本版调整帧缓冲、音频资源生命周期和启动分配顺序，分区布局不变。交付见 `docs/release-1.3.md`。
 
 `game_main.c` 负责正式菜单、配对、游戏循环和暂停。`gamepad.c` 通过 Bluepad32/BTstack 提供 BLE 输入，`gb_input.c` 映射 NES 按键。测试构建由 CMake 的 `FC_SIM_TEST` 选择独立 `tests/fc_sim_main.c`，不改变正式入口行为。
 
@@ -10,9 +10,11 @@ BLE 回调在现有临界区内同时更新实时快照和游戏状态队列。�
 
 `fc_rom.c` 验证经典 iNES 头、Mapper、ROM 长度及银行数。`gb_storage.c` 管理 4 MiB Flash 分区：4 KiB 对齐，SHA256、双目录提交及只读 mmap。工厂容器 `FFCR`，可写目录 `FFC2`，均区别于参考 GB 格式。`tools/pack_roms.py` 生成并验证同格式容器。
 
-`fc_port.c` 维持单个 Nofrendo 会话，Flash 映射供 PRG/CHR ROM 只读访问；堆中保存 272×240 字节帧缓冲、调色板及卡带 RAM。`nes.c` 驱动 CPU/PPU/APU/Mapper，`gb_display.c` 将有效 256×240 区域缩放到 LCD，`gb_audio.c` 将每帧 266/267 个样本排队送至 ES8311。
+`fc_port.c` 维持单个 Nofrendo 会话，Flash 映射供 PRG/CHR ROM 只读访问；堆中保存 272×240 字节帧缓冲、调色板及卡带 RAM。帧缓冲按 4 行拆成 60 块，每块 1088 字节，通过 240 个行指针供 PPU 和显示端访问；优先分配必须连续的卡带 RAM，再分配画面小块，避免 Wi-Fi 管理后的堆碎片使整块帧分配失败。每行保留左右 overdraw，行与行之间不保证地址连续。`nes.c` 驱动 CPU/PPU/APU/Mapper，`gb_display.c` 将有效 256×240 区域缩放到 LCD，`gb_audio.c` 将每帧 266/267 个样本排队送至 ES8311。
 
 FC 显示复用现有显示任务、条带 DMA 缓冲和完成信号量，不分配第二份完整帧。主循环只在显示空闲时渲染，提交后借出核心帧缓冲与调色板；后台任务逐条传输，其间主循环只能执行不写帧缓冲的模拟帧。菜单绘制等待传输完成；所有会话销毁路径先 drain，避免释放仍被显示任务读取的内存。传输错误向主循环返回；display_fps 由后台成功完成次数计算，emu_fps 表示 CPU/APU 帧推进。PassportSim 测试覆盖提交/完成握手，主机测试覆盖跳帧不修改帧缓冲；实际性能仍需真机确认。
+
+音频使用静态 8 帧队列、静态信号量和 5120 字节任务栈；工作任务停止输出后等待通知，下一次启动复用，避免在低内存游戏中反复申请大块堆空间。`gb_audio_prepare()` 在核心分配前准备 I2S/codec，优先满足 DMA 内存需求。入场动画独占显示时复用旧 GB 队列缓冲，不再临时分配完整动画画面；旧 GB 前帧比较缓存已移除，其显示路径逐条带完整绘制。`FC_WIFI_MEMORY_TEST` 是独立、默认关闭的启动回归开关，标准构建脚本强制关闭；测试在现有游戏上检查动画、核心、音频和 LCD，不更改 ROM 或游戏存档。
 
 `gb_saves.c` 用 ROM SHA256 区分 8 KiB 电池 SRAM，两个文件副本各带序号/CRC，较新副本损坏时恢复旧副本，双坏时报告错误；不自动格式化存档。网页 `gb_web.c`/`gb_manager.html` 仅在管理模式操作游戏目录。
 

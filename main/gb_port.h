@@ -28,7 +28,8 @@ typedef struct {
 bool gb_port_create(const gb_rom_source_t *rom, gb_session_t **out);
 void gb_port_set_keys(gb_session_t *session, gb_port_keys_t keys);
 bool gb_port_step_frame(gb_session_t *session, bool render);
-const uint8_t *gb_port_framebuffer(const gb_session_t *session);
+// 240 行，每行 272 字节（含左右各 8 字节 overdraw）；行之间不保证连续。
+uint8_t *const *gb_port_framebuffer(const gb_session_t *session);
 const uint16_t *fc_port_palette(const gb_session_t *session);
 // 复制刚完成一帧的 266/267 个 16 kHz 单声道样本，不额外推进 APU。
 size_t gb_port_audio_frame(gb_session_t *session, int16_t *out, size_t capacity);

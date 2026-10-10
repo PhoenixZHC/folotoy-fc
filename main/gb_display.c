@@ -10,6 +10,7 @@
 #include "freertos/task.h"
 #include "gb_pixels.h"
 #include "gb_port.h"
+#include "fc_launch.h"
 #include "ui_font.h"
 #include <ctype.h>
 #include <string.h>
@@ -19,19 +20,17 @@
 static uint16_t *s_strip;
 static SemaphoreHandle_t s_done;
 static bool s_ready;
-static uint8_t s_previous_frame[GB_FRAME_BYTES];
-static bool s_previous_valid;
-static bool s_previous_enlarged;
+// FC 直接借用核心画面；旧 GB 全帧比较缓存不再常驻，占用的 5760 字节归还堆。
 static uint8_t s_queued_frame[GB_FRAME_BYTES];
 static SemaphoreHandle_t s_frame_free;
 static TaskHandle_t s_frame_task;
 static bool s_queued_enlarged;
 static esp_err_t s_frame_error = ESP_OK;
 static bool s_queued_fc;
-static const uint8_t *s_fc_frame;
+static uint8_t *const *s_fc_frame;
 static const uint16_t *s_fc_palette;
 static atomic_uint s_fc_completed;
-static esp_err_t fc_draw(const uint8_t *frame, const uint16_t *palette);
+static esp_err_t fc_draw(uint8_t *const *frame, const uint16_t *palette);
 
 static esp_err_t wait_frame_idle(void) {
     if (!s_frame_task) return ESP_OK;
@@ -112,7 +111,7 @@ esp_err_t gb_display_clear(uint16_t rgb565) {
     if (!s_ready) return ESP_ERR_INVALID_STATE;
     esp_err_t idle = wait_frame_idle();
     if (idle != ESP_OK) return idle;
-    s_previous_valid = false;
+
     const uint16_t wire = __builtin_bswap16(rgb565);
     for (int row = 0; row < BSP_LCD_H; row += STRIP_ROWS) {
         int count = BSP_LCD_H - row;
@@ -136,20 +135,23 @@ esp_err_t gb_display_boot_frame(const uint8_t *frame) {
     for (int row = 0; row < 216; row += STRIP_ROWS) {
         int count = 216 - row;
         if (count > STRIP_ROWS) count = STRIP_ROWS;
-        if (s_previous_valid && gb_pixels_strip_changed(frame, s_previous_frame,
-                                                        row, count, true) == false) continue;
         for (int y = 0; y < count; y++) for (int x = 0; x < BSP_LCD_W; x++) {
             int sy = (row + y) * 2 / 3;
             bool dark = gb_pixel_shade(frame, x * 2 / 3, sy);
             s_strip[y * BSP_LCD_W + x] = __builtin_bswap16(dark ? GB_LCD_DARK : GB_LCD_LIGHT);
         }
         e = send_strip(0, row + 52, BSP_LCD_W, count);
-        if (e != ESP_OK) { s_previous_valid = false; return e; }
+        if (e != ESP_OK) {  return e; }
     }
-    memcpy(s_previous_frame, frame, GB_FRAME_BYTES);
-    s_previous_valid = true;
-    s_previous_enlarged = true;
     return ESP_OK;
+}
+
+esp_err_t fc_display_launch_frame(uint32_t elapsed_ms) {
+    esp_err_t e = wait_frame_idle();
+    if (e != ESP_OK) return e;
+    // 动画独占显示期间复用队列缓冲，不额外申请 5760 字节连续堆空间。
+    fc_launch_frame(s_queued_frame, elapsed_ms);
+    return gb_display_boot_frame(s_queued_frame);
 }
 
 esp_err_t gb_display_frame(const uint8_t *frame, bool enlarged) {
@@ -161,8 +163,6 @@ esp_err_t gb_display_frame(const uint8_t *frame, bool enlarged) {
     for (int row = 0; row < height; row += STRIP_ROWS) {
         int count = height - row;
         if (count > STRIP_ROWS) count = STRIP_ROWS;
-        if (s_previous_valid && s_previous_enlarged == enlarged &&
-            !gb_pixels_strip_changed(frame, s_previous_frame, row, count, enlarged)) continue;
         int previous_sy = -1;
         for (int dy = 0; dy < count; dy++) {
             int sy = gb_pixel_source_y(row + dy, enlarged);
@@ -179,11 +179,8 @@ esp_err_t gb_display_frame(const uint8_t *frame, bool enlarged) {
             previous_sy = sy;
         }
         esp_err_t e = send_strip(x0, y0 + row, width, count);
-        if (e != ESP_OK) { s_previous_valid = false; return e; }
+        if (e != ESP_OK) {  return e; }
     }
-    memcpy(s_previous_frame, frame, sizeof(s_previous_frame));
-    s_previous_enlarged = enlarged;
-    s_previous_valid = true;
     return ESP_OK;
 }
 
@@ -192,7 +189,7 @@ esp_err_t gb_display_color_frame(const uint8_t *indices,
     if (!s_ready || !indices || !bg_palette || !obj_palette) return ESP_ERR_INVALID_ARG;
     esp_err_t idle = wait_frame_idle();
     if (idle != ESP_OK) return idle;
-    s_previous_valid = false;
+
     uint16_t colors[GB_PORT_COLOR_BLANK + 1];
     colors[GB_PORT_COLOR_BLANK] = 0xffff;
     for (int i = 0; i < 64; i++) {
@@ -283,7 +280,7 @@ esp_err_t gb_display_lines(const char *const *lines, size_t count) {
     if (!s_ready || !lines) return ESP_ERR_INVALID_ARG;
     esp_err_t idle = wait_frame_idle();
     if (idle != ESP_OK) return idle;
-    s_previous_valid = false;
+
     const int top = 24;
     for (int row = 0; row < BSP_LCD_H; row += STRIP_ROWS) {
         int rows = BSP_LCD_H - row;
@@ -428,7 +425,7 @@ esp_err_t gb_display_ui(const gb_ui_model_t *model) {
     if (!s_ready || !model || model->count > GB_UI_MAX_ITEMS) return ESP_ERR_INVALID_ARG;
     esp_err_t idle = wait_frame_idle();
     if (idle != ESP_OK) return idle;
-    s_previous_valid = false;
+
     const uint16_t bg = __builtin_bswap16(GB_LCD_LIGHT);
     const uint16_t ink = __builtin_bswap16(GB_LCD_DARK);
     const uint16_t paper = __builtin_bswap16(GB_LCD_LIGHT);
@@ -478,16 +475,16 @@ esp_err_t gb_display_ui(const gb_ui_model_t *model) {
     return ESP_OK;
 }
 
-static esp_err_t fc_draw(const uint8_t *frame, const uint16_t *palette) {
+static esp_err_t fc_draw(uint8_t *const *frame, const uint16_t *palette) {
     esp_err_t e;
-    s_previous_valid = false;
+
     uint16_t wire[64];
     for (int i=0;i<64;i++) wire[i]=__builtin_bswap16(palette[i]);
     // 256x240 缩小为 240x225，完整保留四周画面，像素坐标固定可测。
     for (int row=0; row<225; row+=STRIP_ROWS) {
         int rows = 225-row < STRIP_ROWS ? 225-row : STRIP_ROWS;
         for (int dy=0; dy<rows; dy++) {
-            const uint8_t *src = frame + ((row+dy)*240/225)*272 + 8;
+            const uint8_t *src = frame[(row+dy)*240/225] + 8;
             for (int x=0; x<240; x++) s_strip[dy*240+x] = wire[src[x*256/240] & 63];
         }
         e=send_strip(0, 40+row, 240, rows);
@@ -496,7 +493,7 @@ static esp_err_t fc_draw(const uint8_t *frame, const uint16_t *palette) {
     return ESP_OK;
 }
 
-esp_err_t fc_display_frame(const uint8_t *frame, const uint16_t *palette) {
+esp_err_t fc_display_frame(uint8_t *const *frame, const uint16_t *palette) {
     if (!s_ready || !frame || !palette) return ESP_ERR_INVALID_ARG;
     esp_err_t e=wait_frame_idle();
     return e==ESP_OK ? fc_draw(frame,palette) : e;
@@ -511,7 +508,7 @@ esp_err_t fc_display_idle(bool *idle) {
     return e;
 }
 
-esp_err_t fc_display_submit(const uint8_t *frame,const uint16_t *palette) {
+esp_err_t fc_display_submit(uint8_t *const *frame,const uint16_t *palette) {
     if (!s_ready || !s_frame_task || !frame || !palette) return ESP_ERR_INVALID_ARG;
     if (xSemaphoreTake(s_frame_free,0)!=pdTRUE) return ESP_ERR_INVALID_STATE;
     if (s_frame_error!=ESP_OK) { xSemaphoreGive(s_frame_free); return s_frame_error; }

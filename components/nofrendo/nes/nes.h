@@ -88,6 +88,7 @@ typedef struct nes_s
 
     /* Video buffer */
     uint8 *vidbuf; // [NES_SCREEN_PITCH * NES_SCREEN_HEIGHT]
+    uint8 **vidrows; // Optional non-contiguous scanlines, including overdraw.
 
     /* Misc */
     nes_type_t system;

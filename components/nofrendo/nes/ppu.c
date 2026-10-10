@@ -684,7 +684,8 @@ void ppu_renderline(uint8 *bmp, int scanline, bool draw_flag)
             ppu.vaddr = (ppu.vaddr & ~0x041F) | (ppu.vaddr_latch & 0x041F);
       }
 
-      uint8 *vidbuf = NES_SCREEN_GETPTR(bmp, 0, scanline);
+      uint8 **rows = nes_getptr()->vidrows;
+      uint8 *vidbuf = rows ? rows[scanline] + NES_SCREEN_OVERDRAW : NES_SCREEN_GETPTR(bmp, 0, scanline);
 
       if (draw_flag && OPT(PPU_DRAW_BACKGROUND))
          ppu_renderbg(vidbuf);

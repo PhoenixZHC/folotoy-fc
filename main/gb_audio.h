@@ -6,6 +6,7 @@
 #include "gb_audio_pacing.h"
 #define GB_AUDIO_SAMPLES GB_AUDIO_SOURCE_SAMPLES
 
+bool gb_audio_prepare(void);
 bool gb_audio_start(uint8_t volume);
 void gb_audio_submit(const int16_t *samples, size_t count);
 bool gb_audio_healthy(void);

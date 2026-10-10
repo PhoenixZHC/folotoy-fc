@@ -1,5 +1,27 @@
 # 更新日志 / Changelog
 
+## 1.3 — 2026-10-10
+
+### 中文
+
+1. 修复退出 Wi-Fi 游戏管理后，打开游戏提示“游戏不支持/内存不足”、需要重启才能恢复的问题。
+2. 修复部分较大 ROM 在首次启动时提示“声音启动失败”的问题，调整音频初始化顺序。
+3. 优化游戏画面缓冲的内存分配，降低内存碎片对游戏启动的影响。
+4. 优化音频任务与缓冲区复用，减少反复进入游戏、暂停和恢复时的内存申请。
+5. 优化游戏入场动画的缓冲复用，减少启动过程中的额外内存占用。
+
+15 组主机测试、40 次实机启动链路检查、4 次 Wi-Fi 启停通过；用户确认口袋妖怪运行与暂停恢复正常。提供沿用原 16 款游戏的 1.3 完整包；实机修复验收使用标记为 1.2 的修复应用，1.3 完整包未烧录。
+
+### English
+
+1. Fixed game launch failures after leaving Wi-Fi game management, where “Unsupported game / insufficient memory” appeared until the device was restarted.
+2. Fixed audio startup failures when launching some larger ROMs for the first time by adjusting the audio initialization order.
+3. Improved framebuffer allocation to reduce launch failures caused by memory fragmentation.
+4. Improved audio task and buffer reuse to reduce memory allocations when launching, pausing, and resuming games.
+5. Reduced temporary memory usage during the game launch animation by reusing existing buffers.
+
+15 host test groups, 40 on-device startup checks and 4 Wi-Fi cycles passed. The user confirmed normal Pokémon gameplay and pause/resume. Device acceptance used the repaired application labelled 1.2; the 1.3 full image retaining the original 16 games has been built and verified but has not been flashed. End-to-end HTTP upload/deletion and long-term stability were not revalidated in this round.
+
 ## 1.2 — 2026-10-10
 
 ### 中文

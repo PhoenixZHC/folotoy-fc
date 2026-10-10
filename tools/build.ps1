@@ -12,7 +12,7 @@ if ($LASTEXITCODE -ne 0) { throw 'ESP-IDF activation failed' }
 $buildDir = if ($Simulator) { 'build-sim' } else { 'build' }
 $testFlag = if ($Simulator) { '-DFC_SIM_TEST=ON' } else { '-DFC_SIM_TEST=OFF' }
 $traceFlag = if ($InputTrace) { '-DFC_INPUT_TRACE=ON' } else { '-DFC_INPUT_TRACE=OFF' }
-idf.py --ccache -B $buildDir $testFlag $traceFlag build
+idf.py --ccache -B $buildDir $testFlag $traceFlag -DFC_WIFI_MEMORY_TEST=OFF build
 if ($LASTEXITCODE -ne 0) { throw 'Firmware build failed' }
 if (-not $Simulator) {
     & '.\.venv\Scripts\python.exe' tools/package_firmware.py

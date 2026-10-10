@@ -15,9 +15,9 @@
 #include "freertos/queue.h"
 static QueueHandle_t buttons;
 static uint32_t frame_hash(gb_session_t *session) {
-    const uint8_t *pixels=gb_port_framebuffer(session);
+    uint8_t *const *pixels=gb_port_framebuffer(session);
     uint32_t hash=2166136261u;
-    for(size_t i=0;i<272*240;i++) hash=(hash^pixels[i])*16777619u;
+    for(size_t y=0;y<240;y++) for(size_t x=0;x<272;x++) hash=(hash^pixels[y][x])*16777619u;
     return hash;
 }
 static void on_button(bsp_btn_t button,bsp_btn_ev_t event,void *context) {

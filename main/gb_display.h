@@ -33,9 +33,10 @@ typedef struct {
 
 esp_err_t gb_display_ui(const gb_ui_model_t *model);
 
-esp_err_t fc_display_frame(const uint8_t *frame, const uint16_t *palette);
+esp_err_t fc_display_launch_frame(uint32_t elapsed_ms);
+esp_err_t fc_display_frame(uint8_t *const *frame, const uint16_t *palette);
 // 提交后，直到 idle 为 true 或 drain 返回前，不得改写/释放 frame 和 palette。
 esp_err_t fc_display_idle(bool *idle);
-esp_err_t fc_display_submit(const uint8_t *frame, const uint16_t *palette);
+esp_err_t fc_display_submit(uint8_t *const *frame, const uint16_t *palette);
 esp_err_t fc_display_drain(void);
 uint32_t fc_display_completed(void);

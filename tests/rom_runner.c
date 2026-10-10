@@ -6,9 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-static unsigned hash_frame(const uint8_t *frame) {
+static unsigned hash_frame(uint8_t *const *frame) {
     unsigned h=2166136261u;
-    for(int y=0;y<240;y++) for(int x=0;x<256;x++) h=(h^(frame[y*272+x+8]&63))*16777619u;
+    for(int y=0;y<240;y++) for(int x=0;x<256;x++) h=(h^(frame[y][x+8]&63))*16777619u;
     return h;
 }
 int main(int argc,char **argv) {
@@ -38,16 +38,16 @@ int main(int argc,char **argv) {
         int16_t pcm[267]; size_t n=gb_port_audio_frame(session,pcm,267); samples+=n;
         for(size_t j=0;j<n;j++) audible+=pcm[j]!=0;
     }
-    const uint8_t *frame=gb_port_framebuffer(session);
+    uint8_t *const *frame=gb_port_framebuffer(session);
     bool colors[64]={0}; unsigned distinct=0;
-    for(int y=0;y<240;y++) for(int x=0;x<256;x++) colors[frame[y*272+x+8]&63]=true;
+    for(int y=0;y<240;y++) for(int x=0;x<256;x++) colors[frame[y][x+8]&63]=true;
     for(int i=0;i<64;i++) distinct+=colors[i];
     if(argc>3) {
         FILE *image=fopen(argv[3],"wb"); if(!image) return 9;
         fprintf(image,"P6\n256 240\n255\n");
         const uint16_t *pal=fc_port_palette(session);
         for(int y=0;y<240;y++) for(int x=0;x<256;x++) {
-            uint16_t c=pal[frame[y*272+x+8]&63];
+            uint16_t c=pal[frame[y][x+8]&63];
             uint8_t rgb[]={((c>>11)&31)*255/31,((c>>5)&63)*255/63,(c&31)*255/31};
             fwrite(rgb,1,3,image);
         }

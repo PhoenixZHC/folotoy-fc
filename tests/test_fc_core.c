@@ -100,16 +100,16 @@ int main(int argc, char **argv) {
             }
         }
         assert(samples==32000); assert(audible);
-        const uint8_t *pixels=gb_port_framebuffer(s);
+        uint8_t *const *pixels=gb_port_framebuffer(s);
         bool varied=false;
-        for(int i=8;i<256;i++) varied|=(pixels[100*272+i]&63)!=(pixels[100*272+8]&63);
+        for(int i=8;i<256;i++) varied|=(pixels[100][i]&63)!=(pixels[100][8]&63);
         assert(varied); assert(fc_port_palette(s));
         // 异步 LCD 借用帧期间，跳过绘制的模拟帧不得修改像素或调色板。
         uint8_t *snapshot=malloc(NES_SCREEN_PITCH*NES_SCREEN_HEIGHT); assert(snapshot);
-        memcpy(snapshot,pixels,NES_SCREEN_PITCH*NES_SCREEN_HEIGHT);
+        for(int y=0;y<NES_SCREEN_HEIGHT;y++) memcpy(snapshot+y*NES_SCREEN_PITCH,pixels[y],NES_SCREEN_PITCH);
         uint16_t colors[64]; memcpy(colors,fc_port_palette(s),sizeof(colors));
         for(int skip=0;skip<8;skip++) assert(gb_port_step_frame(s,false));
-        assert(memcmp(snapshot,pixels,NES_SCREEN_PITCH*NES_SCREEN_HEIGHT)==0);
+        for(int y=0;y<NES_SCREEN_HEIGHT;y++) assert(memcmp(snapshot+y*NES_SCREEN_PITCH,pixels[y],NES_SCREEN_PITCH)==0);
         assert(memcmp(colors,fc_port_palette(s),sizeof(colors))==0);
         free(snapshot);
         gb_port_mark_saved(s); assert(!gb_port_needs_save(s));

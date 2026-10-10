@@ -14,6 +14,10 @@ idf_component_register(
              esp_partition mbedtls spiffs esp_wifi esp_netif esp_event esp_http_server
 )
 target_compile_options(${COMPONENT_LIB} PRIVATE -O2)
+option(FC_WIFI_MEMORY_TEST "Run non-destructive Wi-Fi/game memory regression at boot" OFF)
+if(FC_WIFI_MEMORY_TEST)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE FC_WIFI_MEMORY_TEST=1)
+endif()
 option(FC_INPUT_TRACE "Trace decoded BLE and game-frame button masks" OFF)
 if(FC_INPUT_TRACE)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE FC_INPUT_TRACE=1)
