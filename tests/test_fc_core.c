@@ -25,6 +25,25 @@ int main(int argc, char **argv) {
     assert(fc_rom_allocation(24592)==28672);
     assert(fc_rom_allocation(SIZE_MAX)==0);
     {
+        // NES 2.0 的无 RAM、普通 RAM、存档 RAM 在真实 CPU 内存映射中不同。
+        rom[7]=8;
+        for (int mode=0;mode<3;mode++) {
+            rom[6]=mode==2?2:0; rom[10]=mode==2?0x70:mode==1?7:0;
+            gb_session_t *s=NULL;
+            gb_rom_source_t source={.mapped=rom,.size=(uint32_t)size};
+            assert(gb_port_create(&source,&s));
+            assert(nes_getptr()->cart->prg_ram_banks==(mode!=0));
+            assert((nes_getptr()->cart->prg_ram!=NULL)==(mode!=0));
+            assert(gb_port_sram_size(s)==(mode==2?8192u:0u));
+            mem_putbyte(0x6000,0x35);
+            assert(mem_getbyte(0x6000)==(mode?0x35:0xff));
+            uint8_t value=0;
+            assert(gb_port_read_sram(s,0,&value,1)==(mode==2));
+            gb_port_destroy(s);
+        }
+        rom[7]=rom[10]=0; rom[6]=2;
+    }
+    {
         // Mapper 4 接受 1.5 MiB PRG，仍拒绝越界容量和截断文件。
         uint8_t header[16]={'N','E','S',0x1a,96,0,0x42};
         assert(fc_rom_parse(header,sizeof(header),16+1572864,&info));

@@ -1,4 +1,4 @@
-"""Pack owned classic iNES ROMs into a first-install FC container (no device writes)."""
+"""Pack owned iNES / supported NES 2.0 ROMs into a first-install FC container."""
 import argparse, hashlib, struct
 from pathlib import Path
 MAX_IMAGE=0x400000
@@ -11,14 +11,39 @@ def validate_rom(data):
     if len(data)<16 or data[:4]!=b'NES\x1a': raise ValueError('Not an iNES ROM')
     p,c,flags,high,ram=data[4:9]
     mapper=(flags>>4)|(high&0xf0)
-    if not p or high&15 or any(data[9:16]) or ram>1:
-        raise ValueError('Only classic iNES NTSC with <=8 KiB PRG RAM is supported')
+    if high&3: raise ValueError('Unsupported console type')
+    if high&12 == 8:
+        mapper |= (ram&15)<<8
+        if ram>>4: raise ValueError('Unsupported submapper')
+        if data[12]&0xfc or data[13] or data[14]&0xfc or data[15]&0xc0:
+            raise ValueError('Reserved header bits are nonzero')
+        if data[12]&3 not in (0,2): raise ValueError('Unsupported timing region')
+        if data[14]&3: raise ValueError('Miscellaneous ROM is not supported')
+        if data[15]>1: raise ValueError('Unsupported expansion device')
+        def rom_size(low, upper, unit):
+            return ((upper<<8)|low)*unit if upper!=15 else (1<<(low>>2))*((low&3)*2+1)
+        prg=rom_size(p,data[9]&15,16384)
+        chr_bytes=rom_size(c,data[9]>>4,8192)
+        def ram_size(shift): return 64<<shift if shift else 0
+        volatile=ram_size(data[10]&15)
+        nvram=ram_size(data[10]>>4)
+        chr_ram=ram_size(data[11]&15)
+        if volatile not in (0,8192) or nvram not in (0,8192) or (volatile and nvram) or data[11]>>4 or bool(flags&2)!=bool(nvram) or chr_ram!=(0 if chr_bytes else 8192):
+            raise ValueError('Unsupported RAM declaration')
+        if flags&4 and not (volatile or nvram): raise ValueError('Trainer requires PRG RAM')
+    else:
+        if high&12 or any(data[10:16]): raise ValueError('Invalid iNES header')
+        if data[9]: raise ValueError('Unsupported timing region')
+        if ram>1: raise ValueError('Unsupported PRG RAM')
+        prg,chr_bytes=p*16384,c*8192
+    if not prg or prg%16384 or chr_bytes%8192: raise ValueError('Unsupported ROM size alignment')
+    p,c=prg//16384,chr_bytes//8192
     shapes={0: p<=2 and c<=1,1:p<=16 and c<=16,2:2<=p<=16 and c==0,
             3:p<=2 and 1<=c<=4,4:2<=p<=96 and c<=32,
             7:2<=p<=16 and p%2==0 and c==0,23:2<=p<=32 and 1<=c<=32,
             66:2<=p<=8 and p%2==0 and 1<=c<=4}
     if not shapes.get(mapper,False): raise ValueError(f'Unsupported mapper or bank layout: {mapper}')
-    if len(data)!=16+(512 if flags&4 else 0)+p*16384+c*8192:
+    if len(data)!=16+(512 if flags&4 else 0)+prg+chr_bytes:
         raise ValueError('ROM length does not match header')
     return mapper
 

@@ -6,7 +6,7 @@ endif()
 idf_component_register(
     SRCS ${FC_ENTRY} "gamepad.c" "gamepad_discovery.c" "gb_input.c"
          "gb_display.c" "gb_pixels.c" "gb_storage.c" "gb_saves.c"
-         "ui_font.c" "gb_name.c" "gb_web.c" "gb_audio.c"
+         "ui_font.c" "gb_name.c" "gb_web.c" "gb_audio.c" "gamepad_test.c"
          "gb_audio_pacing.c" "gb_frame_pacing.c" "fc_port.c" "fc_rom.c" "fc_launch.c"
     INCLUDE_DIRS "."
     EMBED_TXTFILES "gb_manager.html"

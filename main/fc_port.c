@@ -55,11 +55,14 @@ bool gb_port_create(const gb_rom_source_t *source, gb_session_t **out) {
         .prg_rom = (uint8_t *)source->mapped + info.prg_offset,
         .chr_rom = info.chr_bytes ? (uint8_t *)source->mapped + info.chr_offset : NULL,
         .prg_rom_banks = info.prg_bytes / 8192, .chr_rom_banks = info.chr_bytes / 8192,
-        .prg_ram_banks = 1, .chr_ram_banks = info.chr_bytes ? 0 : 1,
-        .prg_ram = calloc(1, 8192), .chr_ram = info.chr_bytes ? NULL : calloc(1, 8192),
+        .prg_ram_banks = (info.prg_ram_bytes + info.prg_nvram_bytes) / 8192,
+        .chr_ram_banks = info.chr_ram_bytes / 8192,
+        .prg_ram = (info.prg_ram_bytes || info.prg_nvram_bytes) ? calloc(1, 8192) : NULL,
+        .chr_ram = info.chr_ram_bytes ? calloc(1, info.chr_ram_bytes) : NULL,
     };
     stage = !cartridge.prg_ram ? "PRG RAM allocation failed" : "CHR RAM allocation failed";
-    if (!cartridge.prg_ram || (!info.chr_bytes && !cartridge.chr_ram)) goto fail;
+    if ((cartridge.prg_ram_banks && !cartridge.prg_ram) ||
+        (cartridge.chr_ram_banks && !cartridge.chr_ram)) goto fail;
     // 先满足必须连续的 8 KiB RAM，再用小块容纳画面，避免剩余空间被切碎。
     stage = "frame block allocation failed (1088 bytes)";
     for (int block = 0; block < FRAME_BLOCK_COUNT; block++) {

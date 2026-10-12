@@ -31,6 +31,8 @@ typedef int (*gb_storage_reader_t)(void *context, void *dst, size_t max_bytes);
 // all bytes and the ROM header pass validation and a new directory is committed.
 bool gb_storage_upload(const char *name, size_t bytes,
                        gb_storage_reader_t reader, void *context);
+bool gb_storage_upload_checked(const char *name, size_t bytes,
+                               gb_storage_reader_t reader, void *context, const char **error);
 bool gb_storage_delete(size_t index);
 bool gb_storage_rename(size_t index, const char *name);
 size_t gb_storage_available(void); // minimum of contiguous free region and remaining quota

@@ -35,6 +35,8 @@ static void ap_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
 static esp_err_t page_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "HTTP GET /");
     httpd_resp_set_type(req, "text/html; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_set_hdr(req, "Connection", "close");
     return httpd_resp_send(req, gb_manager_html_start, HTTPD_RESP_USE_STRLEN);
 }
 
@@ -93,9 +95,13 @@ static bool same_origin(httpd_req_t *req) {
 }
 
 static esp_err_t upload_handler(httpd_req_t *req) {
+    // 任一拒绝分支都可能留有未读请求体，须关闭连接后重新接收下一次请求。
+    httpd_resp_set_hdr(req, "Connection", "close");
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
     if (!same_origin(req)) {
         httpd_resp_set_status(req, "403 Forbidden");
-        return httpd_resp_sendstr(req, "拒绝跨站请求");
+        httpd_resp_sendstr(req, "拒绝跨站请求");
+        return ESP_FAIL;
     }
     char query[128], encoded[96], name[32];
     if (req->content_len < 16400 || (size_t)req->content_len > gb_storage_limit() ||
@@ -103,15 +109,19 @@ static esp_err_t upload_handler(httpd_req_t *req) {
         httpd_query_key_value(query, "name", encoded, sizeof(encoded)) != ESP_OK ||
         !gb_name_url_decode(encoded, name, sizeof(name))) {
         httpd_resp_set_status(req, "400 Bad Request");
-        return httpd_resp_sendstr(req, "文件大小或名称无效");
+        httpd_resp_sendstr(req, "文件大小或名称无效");
+        return ESP_FAIL;
     }
-    bool ok = gb_storage_upload(name, req->content_len, receive_chunk, req);
+    const char *error = NULL;
+    bool ok = gb_storage_upload_checked(name, req->content_len, receive_chunk, req, &error);
     if (gb_storage_needs_reload()) {
         httpd_resp_set_status(req, "503 Service Unavailable");
-        return httpd_resp_sendstr(req, "游戏目录状态未确认，请重启设备后核对上传结果");
+        httpd_resp_sendstr(req, "游戏目录状态未确认，请重启设备后核对上传结果");
+        return ESP_FAIL;
     }
     if (!ok) httpd_resp_set_status(req, "400 Bad Request");
-    return httpd_resp_sendstr(req, ok ? "上传成功" : "上传失败：格式、容量或名称无效，名称不能重复");
+    esp_err_t result = httpd_resp_sendstr(req, ok ? "上传成功" : error);
+    return ok ? result : ESP_FAIL;
 }
 
 static esp_err_t rename_handler(httpd_req_t *req) {
@@ -199,12 +209,30 @@ gb_web_status_t gb_web_status(void) { return s_status; }
 
 bool gb_web_start(void) {
     if (s_status.running) return true;
+    // 上次清理失败时先重试；不得覆盖仍存活的服务、网卡或回调句柄。
+    if (s_server || s_ap || s_wifi_initialized || s_ap_event_handler) {
+        gb_web_stop();
+        if (s_server || s_ap || s_wifi_initialized || s_ap_event_handler) {
+            ESP_LOGE(TAG, "Previous management resources are still active");
+            return false;
+        }
+    }
     esp_err_t e = esp_netif_init();
     if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) goto fail;
     e = esp_event_loop_create_default();
     if (e != ESP_OK && e != ESP_ERR_INVALID_STATE) goto fail;
     s_ap = esp_netif_create_default_wifi_ap();
     if (!s_ap) goto fail;
+    e = esp_netif_dhcps_stop(s_ap);
+    if (e != ESP_OK && e != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STOPPED) goto fail;
+    esp_netif_ip_info_t ip = {0};
+    ip.ip.addr = ESP_IP4TOADDR(192, 168, 4, 1);
+    ip.gw.addr = ESP_IP4TOADDR(192, 168, 4, 1);
+    ip.netmask.addr = ESP_IP4TOADDR(255, 255, 255, 0);
+    e = esp_netif_set_ip_info(s_ap, &ip);
+    if (e != ESP_OK) goto fail;
+    e = esp_netif_dhcps_start(s_ap);
+    if (e != ESP_OK) goto fail;
     wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
     e = esp_wifi_init(&init);
     if (e != ESP_OK) goto fail;
@@ -216,7 +244,7 @@ bool gb_web_start(void) {
     if (e != ESP_OK) goto fail;
     e = esp_wifi_set_mode(WIFI_MODE_AP);
     if (e != ESP_OK) goto fail;
-    snprintf(s_status.ssid, sizeof(s_status.ssid), "FC模拟器");
+    snprintf(s_status.ssid, sizeof(s_status.ssid), "folotoy-fc");
     wifi_config_t config = {.ap = {.channel = 1, .max_connection = 2,
                                     .authmode = WIFI_AUTH_OPEN,
                                     .pmf_cfg = {.required = false}}};
@@ -257,25 +285,29 @@ fail:
 }
 
 void gb_web_stop(void) {
+    s_status.running = false;
     if (s_server) {
         esp_err_t e = httpd_stop(s_server);
-        if (e != ESP_OK) ESP_LOGE(TAG, "HTTP server stop failed: %s", esp_err_to_name(e));
+        if (e != ESP_OK) {
+            ESP_LOGE(TAG, "HTTP server stop failed: %s", esp_err_to_name(e));
+            return; // 保留句柄，以便再次停止，不在活动请求下拆除网络。
+        }
         s_server = NULL;
     }
     if (s_wifi_started) {
         esp_err_t e = esp_wifi_stop();
-        if (e != ESP_OK) ESP_LOGE(TAG, "Wi-Fi stop failed: %s", esp_err_to_name(e));
+        if (e != ESP_OK) { ESP_LOGE(TAG, "Wi-Fi stop failed: %s", esp_err_to_name(e)); return; }
         else s_wifi_started = false;
     }
     if (s_wifi_initialized) {
         esp_err_t e = esp_wifi_deinit();
-        if (e != ESP_OK) ESP_LOGE(TAG, "Wi-Fi deinit failed: %s", esp_err_to_name(e));
+        if (e != ESP_OK) { ESP_LOGE(TAG, "Wi-Fi deinit failed: %s", esp_err_to_name(e)); return; }
         else s_wifi_initialized = false;
     }
     if (s_ap_event_handler) {
         esp_err_t e = esp_event_handler_instance_unregister(
             WIFI_EVENT, ESP_EVENT_ANY_ID, s_ap_event_handler);
-        if (e != ESP_OK) ESP_LOGE(TAG, "AP event handler cleanup failed: %s", esp_err_to_name(e));
+        if (e != ESP_OK) { ESP_LOGE(TAG, "AP event handler cleanup failed: %s", esp_err_to_name(e)); return; }
         s_ap_event_handler = NULL;
     }
     if (s_ap && !s_wifi_initialized) {

@@ -1,5 +1,19 @@
 # 更新日志 / Changelog
 
+## 最新烧录与完整包（2026-10-12）
+
+FC 1.4 全页面 Select 返回版已写入 COM14，仅更新 0x10000 应用，保留 16 款游戏、存档和设置；写入哈希及启动身份校验通过。GameBoy 1.8 本批未烧录。全页面长按实际操作仍待用户反馈。 最新完整包和精确哈希见 [1.4 交付](docs/release-1.4.md)。
+
+## 1.4（2026-10-12，本地测试版 / local test build）
+
+- 游戏管理 Wi-Fi 名称改为 `folotoy-fc`，屏幕显示完整 `192.168.4.1`，修复地址截断；此追加修正尚未烧录。
+- Rename the management Wi-Fi to `folotoy-fc` and show the full `192.168.4.1` address without clipping. This follow-up has not been flashed yet.
+- L1241 私有 BLE 与未知版本确认；主页手柄导航及实时测试，箭头方向、底部 Select/Start、摇杆按下变色、松开立即复原。
+- 两项目长按 Select 1 秒暂停，短按及机身 OK 保留；受限 NES 2.0、RAM 声明和擦写前统一校验、热点资源清理。
+- FC 24 组主机/构建通过，COM14 写入与启动确认，16 款保留。卡比音频等待/丢块及输入积压未闭环，Select 实机待反馈。
+- L1241 support and confirmation for unverified firmware, controller home navigation and live test UI, one-second Select pause, bounded NES 2.0/RAM validation before erase, and hotspot lifecycle fixes.
+- Build and 24 host groups pass. FC 1.4 write/startup verified on COM14 with 16 games retained; audio/input stalls and physical Select acceptance remain open. See `docs/release-1.4.md`.
+
 ## 1.3 — 2026-10-10
 
 ### 中文

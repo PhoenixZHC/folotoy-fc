@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#a4202c">
-  <title>游戏管理 · FC模拟器 · 1.3</title>
+  <title>游戏管理 · FC模拟器 · 1.4</title>
   <style>
     :root{color-scheme:light;font-family:ui-monospace,"Cascadia Mono","Microsoft YaHei",sans-serif;background:#f5eee0;color:#a4202c}
     *{box-sizing:border-box}
@@ -57,7 +57,7 @@
 </head>
 <body>
   <main class="shell">
-    <header><div class="console" aria-hidden="true"></div><div><h1>游戏管理</h1><p class="address">FC模拟器 · 1.3 · 192.168.4.1</p></div></header>
+    <header><div class="console" aria-hidden="true"></div><div><h1>游戏管理</h1><p class="address">FC模拟器 · 1.4 · 192.168.4.1</p></div></header>
     <section aria-labelledby="storage-title">
       <div class="section-head"><h2 id="storage-title">存储空间</h2><span id="capacity" class="metric">读取中…</span></div>
       <div class="track" role="progressbar" aria-label="存储空间已使用" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="fill" class="fill"></div></div>
@@ -72,7 +72,7 @@
       <label class="picker" for="file"><span>选择 FC 游戏文件</span><input id="file" type="file" accept=".nes"></label>
       <label class="name-label" for="name">设备上显示的游戏名</label>
       <input id="name" class="name-input" type="text" autocomplete="off" placeholder="选择文件后自动填写">
-      <p id="upload-note" class="note">支持中文名，最多 31 字节（约 10 个汉字）。仅支持 .nes；容量以设备显示为准，上传还需要连续空闲空间。</p>
+      <p id="upload-note" class="note">支持中文名，最多 31 字节（约 10 个汉字）。支持 iNES 和受限 NES 2.0 的 .nes 文件；不支持的硬件配置会在擦写前拒绝。容量以设备显示为准，上传还需要连续空闲空间。</p>
       <button id="upload" class="primary" type="button">上传 FC 游戏</button>
       <p id="status" class="status" role="status" aria-live="polite"></p>
     </section>

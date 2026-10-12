@@ -340,26 +340,52 @@ static bool valid_name(const char *name, size_t except) {
 
 bool gb_storage_upload(const char *name, size_t bytes,
                        gb_storage_reader_t reader, void *context) {
-    if (!s_partition || s_needs_reload || !reader || !valid_name(name, SIZE_MAX) || s_count >= GB_STORAGE_MAX_ROMS ||
-        bytes < 16400 || bytes > gb_storage_limit() ||
-        fc_rom_allocation(bytes) > gb_storage_available()) return false;
+    return gb_storage_upload_checked(name, bytes, reader, context, NULL);
+}
+
+static bool upload_error(const char **error, const char *message) {
+    if (error) *error = message;
+    return false;
+}
+
+bool gb_storage_upload_checked(const char *name, size_t bytes,
+                               gb_storage_reader_t reader, void *context, const char **error) {
+    if (error) *error = "写入失败，请重试";
+    if (!s_partition || s_needs_reload || !reader)
+        return upload_error(error, "存储状态未就绪");
+    if (!valid_name(name, SIZE_MAX)) return upload_error(error, "名称无效或重复");
+    if (s_count >= GB_STORAGE_MAX_ROMS) return upload_error(error, "游戏数量已达上限");
+    if (bytes < 16400 || bytes > gb_storage_limit())
+        return upload_error(error, "文件大小超出范围");
+    if (fc_rom_allocation(bytes) > gb_storage_available())
+        return upload_error(error, "连续存储空间不足");
     uint32_t offset = find_gap((uint32_t)fc_rom_allocation(bytes));
-    if (!offset) return false;
+    if (!offset) return upload_error(error, "连续存储空间不足");
+    // 完整接收并验证 16 字节文件头后才擦除；不需要缓存整份 ROM。
+    uint8_t buffer[1024], header[16], digest[32];
+    for (size_t have = 0; have < sizeof(header);) {
+        size_t want = sizeof(header) - have;
+        int got = reader(context, header + have, want);
+        if (got <= 0 || (size_t)got > want) return upload_error(error, "文件头接收中断");
+        have += (size_t)got;
+    }
+    fc_rom_info_t info;
+    fc_rom_error_t format = fc_rom_validate(header, sizeof(header), bytes, &info);
+    if (format != FC_ROM_OK) return upload_error(error, fc_rom_error_string(format));
     unmap_selected();
     if (esp_partition_erase_range(s_partition, offset, fc_rom_allocation(bytes)) != ESP_OK) return false;
-    uint8_t buffer[1024], header[16] = {0}, digest[32];
     mbedtls_sha256_context sha;
     mbedtls_sha256_init(&sha);
-    bool ok = mbedtls_sha256_starts(&sha, 0) == 0;
-    for (size_t written = 0; ok && written < bytes;) {
+    bool ok = mbedtls_sha256_starts(&sha, 0) == 0 &&
+        esp_partition_write(s_partition, offset, header, sizeof(header)) == ESP_OK &&
+        mbedtls_sha256_update(&sha, header, sizeof(header)) == 0;
+    for (size_t written = sizeof(header); ok && written < bytes;) {
         size_t want = bytes - written;
         if (want > sizeof(buffer)) want = sizeof(buffer);
         int got = reader(context, buffer, want);
-        if (got <= 0 || (size_t)got > want) { ok = false; break; }
-        if (written < sizeof(header)) {
-            size_t copy = sizeof(header) - written;
-            if (copy > (size_t)got) copy = (size_t)got;
-            memcpy(header + written, buffer, copy);
+        if (got <= 0 || (size_t)got > want) {
+            upload_error(error, "文件接收中断");
+            ok = false; break;
         }
         ok = esp_partition_write(s_partition, offset + written, buffer, got) == ESP_OK &&
              mbedtls_sha256_update(&sha, buffer, got) == 0;
@@ -367,8 +393,7 @@ bool gb_storage_upload(const char *name, size_t bytes,
     }
     if (ok) ok = mbedtls_sha256_finish(&sha, digest) == 0;
     mbedtls_sha256_free(&sha);
-    fc_rom_info_t info;
-    if (!ok || !fc_rom_parse(header, sizeof(header), bytes, &info)) return false;
+    if (!ok) return false;
     gb_rom_entry_t updated[GB_STORAGE_MAX_ROMS];
     memcpy(updated, s_entries, s_count * sizeof(*updated));
     gb_rom_entry_t *entry = &updated[s_count];
@@ -377,7 +402,9 @@ bool gb_storage_upload(const char *name, size_t bytes,
     entry->offset = offset;
     entry->size = bytes;
     memcpy(entry->sha256, digest, sizeof(digest));
-    return publish_directory(updated, s_count + 1);
+    if (!publish_directory(updated, s_count + 1)) return upload_error(error, "游戏目录写入失败");
+    if (error) *error = NULL;
+    return true;
 }
 
 bool gb_storage_delete(size_t index) {

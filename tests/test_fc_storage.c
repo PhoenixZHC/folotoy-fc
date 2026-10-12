@@ -5,7 +5,7 @@
 #include <string.h>
 #define ESP_LOGI(tag, ...) ((void)(tag))
 #define ESP_LOGW(tag, ...) ((void)(tag))
-#define ESP_LOGE(tag, ...) ((void)(tag))
+#define ESP_LOGE(tag, format, ...) ((void)(tag))
 static int fail_alloc;
 static bool track_commit_allocations, directory_written;
 static unsigned late_allocations;
@@ -57,7 +57,7 @@ static int receive(void *context, void *dst, size_t n) {
     if (in->at >= in->stop) return -1;
     if (n > in->stop - in->at) n = in->stop - in->at;
     /* Small chunks also split the header across reads. */
-    if (n > 79) n = 79;
+    if (n > 7) n = 7;
     memset(dst, 0x55, n);
     uint8_t header[16]={'N','E','S',0x1a, (uint8_t)(2u << in->code),0,
         in->code ? 0x40 : 0, in->cgb ? 8 : 0};
@@ -187,7 +187,39 @@ static void stale_catalog_tokens(void) {
     assert(!gb_storage_resolve_token(second, &index));
 }
 
+typedef struct { uint8_t h[16]; size_t at; } header_input_t;
+static int header_receive(void *context, void *dst, size_t want) {
+    header_input_t *in=context;
+    if (want>3) want=3;
+    memset(dst,0,want);
+    for(size_t i=0;i<want;i++) if(in->at+i<16) ((uint8_t *)dst)[i]=in->h[in->at+i];
+    in->at+=want;
+    return (int)want;
+}
+static void preflight(void) {
+    const unsigned fields[]={8,12,10,11,15,14,9,7};
+    const uint8_t values[]={0x10,1,6,7,2,1,1,9};
+    for(unsigned i=0;i<sizeof(fields)/sizeof(fields[0]);i++) {
+        reset();
+        header_input_t in={{'N','E','S',0x1a,1,1,0,8},0};
+        in.h[fields[i]]=values[i];
+        const char *error=NULL;
+        assert(!gb_storage_upload_checked("bad",24592,header_receive,&in,&error));
+        assert(erase_calls==0 && in.at==16 && error && *error);
+        assert(gb_storage_count()==0);
+    }
+    reset();
+    header_input_t in={{'N','E','S',0x1a,56,52,2,8,0,255,0x70},0};
+    const char *error=NULL;
+    assert(gb_storage_upload_checked("NES2",24592,header_receive,&in,&error));
+    assert(!error);
+    gb_rom_source_t source; assert(gb_storage_open(0,&source));
+    fc_rom_info_t info; assert(fc_rom_parse(source.mapped,source.size,source.size,&info));
+    assert(info.nes2 && info.battery);
+}
+
 int main(void) {
+    preflight();
     commit_failure_lifecycle();
     stale_catalog_tokens();
     preloaded_game_lifecycle();

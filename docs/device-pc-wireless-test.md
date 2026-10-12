@@ -1,0 +1,38 @@
+# COM14 完整包与 PC 无线测试（2026-10-12）
+
+## 最新烧录与完整包（2026-10-12）
+
+FC 1.4 全页面 Select 返回版已写入 COM14，仅更新 0x10000 应用，保留 16 款游戏、存档和设置；写入哈希及启动身份校验通过。GameBoy 1.8 本批未烧录。全页面长按实际操作仍待用户反馈。 最新完整包和精确哈希见 [1.4 交付](release-1.4.md)。
+
+用户明确批准将 FC 完整包写入 COM14，进行手柄无线模式测试。未创建分支、提交、推送或发布。
+
+- 目标：COM14，esptool 识别 ESP32-C3 rev 1.1、8 MiB Flash。
+- 完整包：`build/release/FoloToy-FC-full.bin`，8388608 字节，从 0x0 写入；包含空 ROM 区和初始存档区，覆盖原游戏、存档及设置。
+- SHA256：`4b4bd3d02352747b913ad0846439562b155c6caa493602f37f4a4452a011cfe6`。
+- 匹配 ELF SHA256：`ab43cb2308f3ef0cd08bd2d3ae76b58db83990ec76f8063f7c50045a1cd5e070`。
+- 烧录前重新核验布局、完整包哈希、所有组件哈希及 ELF 身份；esptool 写入后报告 `Hash of data verified`，随后重启。
+- 启动日志：FoloToy-FC 1.3，ELF 前缀 `ab43cb230`，显示/板载按键/BLE 初始化完成，`FC_READY version=1.3 games=0`。首次完整刷新后 RF 校准重新生成，符合空 NVS 状态。
+
+本轮启动日志位于本地忽略目录 `build/com14-fc-pc-wireless-startup.log`。用户确认手柄当前处于 PC 无线模式，设备列表与串口观察到的名称是 IINE GAMEPAD。此证据只确认该模式下可发现 BLE 接口；不能据此判断是否同时存在 Xbox 接口，或认定 PC 无线按键测试已通过。已请用户保持该模式，选择 IINE GAMEPAD 连接，连接日志另存 `build/com14-fc-pc-wireless-connect.log`。
+
+用户随后反馈：保持 PC 无线模式，IINE GAMEPAD 已连接，手柄测试页按键有反应。串口也列出一个已连接 BLE gamepad，名称 IINE GAMEPAD，handle=1；尚无证据表明走 Xbox 标准 HID。此次可以确认该用户手柄在该模式下的基本连接及输入，不推广到所有 L1241 版本或所有控件。摇杆按下/释放变色、方向和 Select/Start 等逐项验收待用户反馈。
+
+进一步用户反馈：按钮功能均正常，摇杆按下效果正常；普通按钮释放后先浅红再恢复，看起来像卡顿。代码确认这是原有 600 ms 近期按下高亮，并非该反馈所证明的输入卡顿。FC / GameBoy 渲染已改为仅依据当前按下状态着色，按钮及方向松开后第一帧直接复原；新回归用例检查这一行为。此显示修正版尚未刷入 COM14，前述烧录哈希和用户实测对应修改前版本。
+
+用户另报主页仍只能用机身按键。两项目 home_loop 原先只读取板载队列，现复用 gb_menu_input_step 处理手柄上下/A，并保持板载优先、进入时持键抑制、重连不误确认。主机执行实际主页循环，覆盖上下循环、持键、重连、板载回退及同时输入；修正版设备验收待烧录。
+
+构建和主机验证沿用本轮已通过结果（FC 23 组、0 失败）。硬件通过：完整包写入校验、正常启动、上述用户确认的基本连接与输入。未验证：断连重连、全部控件、长期无线稳定性、Wi-Fi 管理、游戏和存档。GameBoy 本轮没有烧录或实机测试。
+# 2026-10-12 最新预装完整包烧录
+
+按用户“烧录一个预装游戏的完整版本”的授权，将最新 FC 应用与既有正式包的 16 款 ROM 合并，从 0x0 写入 COM14 的 8 MiB Flash。完整刷新覆盖设置、绑定、游戏和存档。
+
+- 完整包：`deliverables/FC-1.3-16games-controller-20261012/FC-1.3-16games-controller-full.bin`
+- 完整包 SHA256：`6545d2488a4e47bbd9330e0d1c1c40279dfbba3671371cddd77108f0f9b0e375`
+- 应用 SHA256：`9df1c2468717a1d00412d047115d65521c8d800aecf813b57625d69f8d69d894`
+- 匹配 ELF SHA256：`1f7a2efabe3d9df13e6b49412ccbd71d2e7fae8cb2dfd7651054bc8f541be303`
+- ROM 分区与原正式包逐字节一致，SHA256 `44d35274ace0448fc0aa523d4449d9436f419705b245d272cb5974ab174d05dd`。
+- 打包、布局及读回校验通过；esptool 写入后报告 `Hash of data verified`。
+- 启动身份匹配，`FC_READY version=1.3 games=16`。最新交互行为及游戏运行待用户实测。
+- 原始串口日志仅本地保留于 `build/com14-preloaded-controller-startup.log`。
+
+以下为此前空游戏完整包的测试记录。
