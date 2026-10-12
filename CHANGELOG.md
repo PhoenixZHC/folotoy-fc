@@ -2,12 +2,14 @@
 
 ## 最新烧录与完整包（2026-10-12）
 
-FC 1.4 全页面 Select 返回版已写入 COM14，仅更新 0x10000 应用，保留 16 款游戏、存档和设置；写入哈希及启动身份校验通过。GameBoy 1.8 本批未烧录。全页面长按实际操作仍待用户反馈。 最新完整包和精确哈希见 [1.4 交付](docs/release-1.4.md)。
+FC 1.4 热点修正版（源码提交 `db1f525`）已向 COM14 的 `0x10000` 写入应用，写入哈希校验通过，保留 16 款游戏、存档和设置。20 秒启动日志确认 `FC_READY version=1.4 games=16` 和匹配 ELF，未见 panic/abort/watchdog；串口已释放。热点显示及手机连接操作仍待用户确认。
+
+最新 16 款游戏完整包包含 Wi-Fi 修正，已校验但未整包刷写；精确身份见 [1.4 交付](docs/release-1.4.md)。
 
 ## 1.4（2026-10-12，本地测试版 / local test build）
 
-- 游戏管理 Wi-Fi 名称改为 `folotoy-fc`，屏幕显示完整 `192.168.4.1`，修复地址截断；此追加修正尚未烧录。
-- Rename the management Wi-Fi to `folotoy-fc` and show the full `192.168.4.1` address without clipping. This follow-up has not been flashed yet.
+- 游戏管理 Wi-Fi 名称改为 `folotoy-fc`，屏幕显示完整 `192.168.4.1`，修复地址截断；已烧录并通过启动检查，显示及手机连接待验收。
+- Rename the management Wi-Fi to `folotoy-fc` and show the full `192.168.4.1` address without clipping. The application was flashed and startup verified; screen and phone checks remain pending.
 - L1241 私有 BLE 与未知版本确认；主页手柄导航及实时测试，箭头方向、底部 Select/Start、摇杆按下变色、松开立即复原。
 - 两项目长按 Select 1 秒暂停，短按及机身 OK 保留；受限 NES 2.0、RAM 声明和擦写前统一校验、热点资源清理。
 - FC 24 组主机/构建通过，COM14 写入与启动确认，16 款保留。卡比音频等待/丢块及输入积压未闭环，Select 实机待反馈。

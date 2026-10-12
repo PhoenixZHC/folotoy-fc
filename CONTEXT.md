@@ -1,8 +1,8 @@
 # 当前状态（2026-10-12）
 
-- FC 1.4 全页面 Select 返回版已写入 COM14，仅更新 0x10000 应用，保留 16 款游戏、存档和设置；写入哈希及启动身份校验通过。GameBoy 1.8 本批未烧录。全页面长按实际操作仍待用户反馈。
-- 应用 `08ea366061b22c63b33e242ac90548cd7ac5f5f915c258d4303e305e4dfb6622`，ELF `2bb636c5aa3fc1bd278a1eea95493cbdb9c699cecb77d012b728f0279d0c3d50`；启动 `FC_READY version=1.4 games=16`，串口记录 `build/com14-select-return-startup.log`。
-- 最新完整包 `deliverables/FC-1.4-select-return-16games/FC-1.4-select-return-16games-full.bin`，SHA256 `6e40197dfcc0e761974b2b81f26a7078ea1c64536a9ab5b92459b639807459f1`，8 MiB/16 款；完整刷写覆盖数据。详情 `docs/release-1.4.md`。
-- 两项目已同步 L1241、主页导航和测试 UI、全页面 Select 1 秒返回。FC 24 组、GameBoy 32 组主机测试通过，构建及镜像通过。GameBoy 1.8 未实机验证。
-- 本次 FC 源码追加游戏管理热点 `folotoy-fc`，屏幕显示完整 `192.168.4.1`。该修正尚未烧录，以上 COM14 身份与预装包均为修正前版本。
-- FC NES 2.0 诊断、网页和断电存档待验收；卡比 155 ms 音频等待、3 次丢块/2 个输入积压丢弃未定位，不因菜单修复消除。
+- 游戏管理热点名称为 `folotoy-fc`，无密码；手机连接后在浏览器打开 `http://192.168.4.1/`，提示无互联网时保持连接。设备屏幕仅显示完整 IP `192.168.4.1`，去掉协议前缀和末尾斜杠以避免截断。
+- FC 1.4 热点修正版（源码提交 `db1f525`）已向 COM14 的 `0x10000` 写入应用，写入哈希校验通过，保留 16 款游戏、存档和设置。20 秒启动日志确认 `FC_READY version=1.4 games=16` 和匹配 ELF，未见 panic/abort/watchdog；串口已释放。热点显示及手机连接操作仍待用户确认。
+- 完整包 `deliverables/FC-1.4-wifi-16games/FC-1.4-wifi-16games-full.bin`，8,388,608 字节，包含原 16 款游戏；SHA256 `97e75bc4ab2f40a3a8cd4bb6f4aa957d27e26a6fc2d75076dcf174fdb6de7c79`。应用 SHA256 `c39e304b55afc28154775adebaa47705a524553dce623cda2675f3464732e333`，匹配 ELF SHA256 `68d4bcfda09e96558d11329a7cd844453ddca9a032eaa3ac7976ae55740ab1c8`。完整包从 `0x0` 写入会覆盖游戏、存档、设置及配对；本次仅打包，未再次烧录。
+- FC 24 组主机测试、ESP-IDF 5.5.3 构建及镜像校验通过。GameBoy 1.8 已同步手柄/UI/全页面 Select 返回，但未烧录；本次未修改 GameBoy。
+- NES 2.0 诊断、手机上传、断电存档及全部 Select 快捷键仍待实机验收；卡比 155 ms 音频等待、3 次音频丢块和 2 个积压输入丢弃未定位。
+- 当前交付详情见 `docs/release-1.4.md`；旧身份仅在历史记录保留。源码 `db1f525` 已推送，交付文档同步另行提交。

@@ -9,7 +9,7 @@
 
 `gb_select_pause_t` 在游戏循环读取实时快照，按单调时间判定 1 秒长按，不用输入队列补播时间计时。短按 Select 正常送入核心；触发一次后及入局/恢复/重连持键时等待释放。复用既有暂停、音频停止/恢复与存档流程，不改变分区。GameBoy 采用相同状态机。
 
-当前本地交付版本 1.3。Mapper 4 PRG 上限为 1.5 MiB，CHR 上限仍 256 KiB。ROM 直接映射 Flash；本版调整帧缓冲、音频资源生命周期和启动分配顺序，分区布局不变。交付见 `docs/release-1.3.md`。
+当前交付版本 1.4；游戏管理 AP 由 `gb_web.c` 设置为 `folotoy-fc`，`game_main.c` 的紧凑信息行显示 `192.168.4.1`，不改网络路由或分区布局。Mapper 4 PRG 上限为 1.5 MiB，CHR 上限仍 256 KiB。ROM 直接映射 Flash；本版调整帧缓冲、音频资源生命周期和启动分配顺序，分区布局不变。交付见 `docs/release-1.4.md`。
 
 `game_main.c` 负责正式菜单、配对、游戏循环和暂停。`gamepad.c` 通过 Bluepad32/BTstack 提供 BLE 输入，`gb_input.c` 映射 NES 按键。测试构建由 CMake 的 `FC_SIM_TEST` 选择独立 `tests/fc_sim_main.c`，不改变正式入口行为。
 
