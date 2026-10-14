@@ -12,6 +12,7 @@
 #include "uni.h"
 #include "bt/uni_bt.h"
 #include "bt/uni_bt_le_iine.h"
+#include "parser/uni_hid_parser_keyboard.h"
 
 static const char *TAG = "gamepad";
 static portMUX_TYPE s_lock = portMUX_INITIALIZER_UNLOCKED;
@@ -302,6 +303,7 @@ static uni_error_t device_ready(uni_hid_device_t *device) {
     btstack_run_loop_remove_timer(&s_passkey_timer);
     s_owner = device;
     taskENTER_CRITICAL(&s_lock);
+    bool remote = uni_hid_device_is_keyboard(device) && uni_hid_parser_keyboard_is_xiaomi_remote(device);
     gamepad_test_reset(&s_test, true, uni_hid_device_is_keyboard(device));
     s_test.iine = device->ble_iine;
     s_test.firmware = uni_bt_le_iine_firmware(device);
@@ -309,14 +311,40 @@ static uni_error_t device_ready(uni_hid_device_t *device) {
     set_sample((pad_sample_t){.connected = true});
     update_scan_policy();
     ESP_LOGI(TAG, "controller ready");
+#ifdef FC_INPUT_TRACE
+    ESP_LOGI(TAG, "input_identity VID=%04x PID=%04x COD=%04lx keyboard=%u xiaomi=%u name=%s",
+             device->vendor_id, device->product_id, (unsigned long)device->cod,
+             (unsigned)uni_hid_device_is_keyboard(device), (unsigned)remote, device->name);
+#endif
+    if (remote) ESP_LOGI(TAG, "MI RC horizontal mapping ready VID=%04x PID=%04x; device acceptance pending",
+                        device->vendor_id, device->product_id);
     return UNI_ERROR_SUCCESS;
 }
 
 static void controller_data(uni_hid_device_t *device, uni_controller_t *ctl) {
     if (device != s_owner) return;
     if (ctl->klass == UNI_CONTROLLER_CLASS_KEYBOARD) {
-        set_sample(gb_input_keyboard(ctl->keyboard.pressed_keys,
-                                    UNI_KEYBOARD_PRESSED_KEYS_MAX, ctl->keyboard.modifiers));
+        pad_sample_t next = gb_input_keyboard(ctl->keyboard.pressed_keys,
+                                             UNI_KEYBOARD_PRESSED_KEYS_MAX, ctl->keyboard.modifiers);
+#ifdef FC_INPUT_TRACE
+        static unsigned keyboard_trace_reports;
+        if (keyboard_trace_reports++ < 256)
+            ESP_LOGI(TAG, "input_keyboard mapped=%02x keys=%02x,%02x,%02x modifiers=%02x",
+                     trace_bits(next), ctl->keyboard.pressed_keys[0], ctl->keyboard.pressed_keys[1],
+                     ctl->keyboard.pressed_keys[2], ctl->keyboard.modifiers);
+#endif
+        {
+            uint16_t buttons = (next.a ? BUTTON_A : 0) | (next.b ? BUTTON_B : 0) |
+                               (next.view ? 1u << 10 : 0) | (next.menu ? 1u << 11 : 0);
+            uint8_t dpad = (next.up ? DPAD_UP : 0) | (next.down ? DPAD_DOWN : 0) |
+                           (next.right ? DPAD_RIGHT : 0) | (next.left ? DPAD_LEFT : 0);
+            const int32_t zero[4] = {0};
+            taskENTER_CRITICAL(&s_lock);
+            gamepad_test_update(&s_test, buttons, dpad, zero, zero,
+                                (uint32_t)(esp_timer_get_time() / 1000));
+            taskEXIT_CRITICAL(&s_lock);
+        }
+        set_sample(next);
         return;
     }
     if (ctl->klass != UNI_CONTROLLER_CLASS_GAMEPAD) return;

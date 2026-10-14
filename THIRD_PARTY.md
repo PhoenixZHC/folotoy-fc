@@ -1,5 +1,7 @@
 # 来源和本地改动
 
+- 小米遥控器横握：2026-10-14 查阅 [MI-RC003-ESP32-Bridge 的键码定义](https://github.com/ncmro7/MI-RC003-ESP32-Bridge/blob/main/main/keymap/key_definitions.h) 和 [协议说明](https://github.com/ncmro7/MI-RC003-ESP32-Bridge)，以及 [MiVibe-Remote 的 VID/PID 记录](https://github.com/wyuzhi/MiVibe-Remote)。仅参考公开协议数据，在现有 Bluepad32 描述符解析路径中独立实现用户指定映射，没有导入桥接固件、USB 或语音实现；主机测试使用构造描述符/报告，非真机抓包。验证边界见 `docs/xiaomi-remote.md`。
+
 - 硬件 BSP、蓝牙输入、菜单、网页管理和存档框架：本地 `E:\code\folotoy-gameboy`，参考提交 `f221fe83fc40ec07f37f93bb19ce3d74879e8718`。原工程未修改。许可见 `licenses/FoloToy-AI-Passport.txt`。
 - NES 核心：[ducalex/retro-go](https://github.com/ducalex/retro-go/tree/4ced120669750ca7228fd0414211430c1d923166/components/nofrendo)，固定提交 `4ced120669750ca7228fd0414211430c1d923166`。下载按 Git blob SHA1 校验；完整来源文件头保留。目录自带 `COPYING` 为 GPL v2，部分源文件头注明 GNU Library GPL v2；保留全部声明，不能将整包当作宽松许可。
 - 本地核心修改：只编译 Mapper 0/1/2/3/4/7/23/66；移除文件系统加载及上游前端入口；检查调色板/APU 分配失败；16 kHz 每帧 266/267 样本余数累计；Mapper 23 重置寄存器；PPU 复位时初始化显存地址递增步长；APU 相位改用 Q16 定点；CPU 解释器局部开启 GCC switch 跳转表；无 Mapper latch 回调的跳过绘制路径只检查精灵 0。优化参考与验证边界见 `docs/performance.md`。

@@ -1,6 +1,26 @@
 # 更新日志 / Changelog
 
-## 最新烧录与完整包（2026-10-12）
+## 1.5（2026-10-14，十六游戏版已烧录 / sixteen-game build flashed）
+
+- 当前菜单修复日常版完整 16 款 BIN 已交付复核，8 MiB、0x0 安装，组件/ELF/原 ROM 分区一致性通过；项目文档与 Obsidian 同步。本次未重新编译或烧录，完整安装会覆盖设备数据。详见 [完整交付](docs/release-1.5.md)。
+- The current production menu-fix sixteen-game full image passed delivery revalidation (8 MiB, installation at 0x0), including component/ELF/original-ROM identity checks. Documents and Obsidian were synchronized. No rebuild or flash was performed this delivery; complete installation replaces device data. See [full delivery](docs/release-1.5.en.md).
+- 最新修复主页入口：已连接显示“游戏列表”，断开显示“连接手柄”；列表入页及游戏返回建立当前持键基线，避免直接启动首个游戏。26 组主机通过、0 失败，用户反馈菜单“测试通过”。COM14 仅更新应用，保留 16 款游戏、存档、设置和配对；当前诊断开关关闭，启动身份校验通过，串口已释放。见 [菜单修复记录](docs/menu-entry-fix.md)。
+- Latest repair: the first home item switches between game list and pairing with connection state. Entry and game-return held-key baselines prevent unintended game launch. 26 host groups pass, 0 fail; the user confirmed the physical menu checks. COM14 received an application-only production update preserving 16 games, saves, settings and bonds; startup identity passed and the port is released. See [menu repair](docs/menu-entry-fix.en.md).
+
+- 后续恢复所有外接设备共用的完整手柄测试页，不按遥控器隐藏控件；普通键盘也能显示映射输入。修复 RC001 / FW2671 实际 8 字节负载与声明 6 字节不一致导致的全按键拒绝。25 组主机通过，修复诊断包已写入 COM14，八键及释放串口确认，用户确认单键正常；实测不能在《魂斗罗》中同时移动/开枪，抓包最多单个键码。见 [修复记录](docs/rc001-input-fix.md)。
+- Restored one complete test layout for external devices, including mapped keyboard input. Fixed RC001/FW2671's 8-byte keyboard payload despite a 6-byte declared map. 25 host groups pass; the corrected diagnostic image is flashed on COM14, with eight inputs/releases and user-confirmed single-key behavior. Physical multi-key gameplay remains unavailable (at most one keycode per captured report). See [repair record](docs/rc001-input-fix.en.md).
+
+- 随后按用户明确要求制作原 16 款游戏完整包，从 0x0 全新写入 COM14，覆盖原数据；写入哈希与 20 秒启动身份校验通过，确认 `FC_READY version=1.5 games=16`，串口已释放。游戏分区与旧 1.4 包逐字节一致，遥控器功能仍待实测。完整身份见 [交付记录](docs/release-1.5.md)。
+- Subsequently packaged the original sixteen games and performed an explicitly authorized complete flash at 0x0 on COM14. Write hash and 20-second startup identity checks passed (`FC_READY version=1.5 games=16`); the port is released. The ROM partition is unchanged; physical remote acceptance is pending. See [release record](docs/release-1.5.en.md).
+
+- 新增小米 BLE 遥控器横握：右→上、上→左、左→下、下→右，TV→A、三横线菜单→B、主页→Start、返回→Select；Select 长按 1 秒复用暂停/页面返回。
+- 按 VID/PID `2717:32B8` 启用映射；已知广播名称仅作为待探测候选，实际连接仍校验 HID 描述符。最初的遥控器专用布局已被上述固定完整测试页替代。
+- 25 组主机测试、7 项打包测试、ESP-IDF 5.5.3 构建和镜像校验通过；遥控器配对、组合键、重连和游戏延迟待实机验收。GameBoy 未修改。见 [说明](docs/xiaomi-remote.md)。
+- Added horizontal Xiaomi BLE remote mapping with rotated directions, TV=A, Menu=B, Home=Start and Back=Select. Holding Back for one second uses the existing pause/back action.
+- Mapping is scoped to VID/PID `2717:32B8`; names only admit discovery candidates, with the actual HID map checked after selection. The test screen shows mapped NES controls.
+- 25 host groups, 7 packaging tests, ESP-IDF 5.5.3 build and image verification pass. Physical pairing, simultaneous keys, reconnect and gameplay latency remain unverified. GameBoy is unchanged. See [English notes](docs/xiaomi-remote.en.md).
+
+## 1.4 历史烧录与完整包（2026-10-12）
 
 FC 1.4 热点修正版（源码提交 `db1f525`）已向 COM14 的 `0x10000` 写入应用，写入哈希校验通过，保留 16 款游戏、存档和设置。20 秒启动日志确认 `FC_READY version=1.4 games=16` 和匹配 ELF，未见 panic/abort/watchdog；串口已释放。热点显示及手机连接操作仍待用户确认。
 

@@ -162,6 +162,9 @@ if(IDF_TARGET)
     idf_component_register(SRCS "${srcs}"
                         INCLUDE_DIRS "include"
                         REQUIRES ${requires})
+    if(FC_INPUT_TRACE)
+        target_compile_definitions(${COMPONENT_LIB} PRIVATE FC_INPUT_TRACE=1)
+    endif()
 elseif(PICO_SDK_VERSION_STRING OR BLUEPAD32_TARGET_POSIX)
     # Valid for Pico W and Linux
     add_library(bluepad32 ${srcs})

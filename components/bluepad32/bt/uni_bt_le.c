@@ -157,6 +157,17 @@ static void parse_report(const uint8_t* packet, uint16_t size) {
         loge("BLE parser report: Invalid device for hids_cid=%d\n", hids_cid);
         return;
     }
+#ifdef FC_INPUT_TRACE
+    // 诊断版只记录前 256 个通知，避免持续日志影响游戏运行。
+    static unsigned trace_reports;
+    if (trace_reports++ < 256) {
+        const uint8_t* bytes = gattservice_subevent_hid_report_get_report(packet);
+        uint16_t length = gattservice_subevent_hid_report_get_report_len(packet);
+        logi("input_hid_notify service=%u selected=%u VID=%04x PID=%04x len=%u\n",
+             service_index, device->ble_hid_service_index, device->vendor_id, device->product_id, length);
+        printf_hexdump(bytes, length);
+    }
+#endif
     if (device->ble_hid_service_filter &&
         (device->ble_hid_service_index == UINT8_MAX || service_index != device->ble_hid_service_index))
         return;
@@ -241,6 +252,11 @@ static void uni_hids_client_packet_handler(uint8_t packet_type, uint16_t channel
                             uni_hid_device_set_hid_descriptor(device, map, len);
                             device->ble_hid_service_index = i;
                             device->ble_hid_service_filter = true;
+#ifdef FC_INPUT_TRACE
+                            logi("input_hid_map service=%u COD=%04x len=%u VID=%04x PID=%04x\n",
+                                 i, cod, len, device->vendor_id, device->product_id);
+                            printf_hexdump(map, len);
+#endif
                             break;
                         }
                         if (device->ble_hid_service_index == UINT8_MAX) {

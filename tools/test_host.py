@@ -34,14 +34,15 @@ cases=[
  ('bt_le_recovery',['tests/test_bt_le_recovery.c','components/bluepad32/bt/uni_bt_le_hid.c','components/btstack/src/btstack_util.c'],[]),
  ('gb_gamepad_hid',['tests/test_gb_gamepad_hid.c','components/bluepad32/parser/uni_hid_parser.c','components/bluepad32/parser/uni_hid_parser_standard.c','components/bluepad32/controller/uni_gamepad.c','components/btstack/src/btstack_hid_parser.c','components/btstack/src/btstack_util.c'],[]),
  ('gb_keyboard_hid',['tests/test_gb_keyboard_hid.c','main/gb_input.c','components/bluepad32/parser/uni_hid_parser.c','components/bluepad32/parser/uni_hid_parser_keyboard.c','components/bluepad32/controller/uni_gamepad.c','components/btstack/src/btstack_hid_parser.c','components/btstack/src/btstack_util.c'],[]),
+ ('xiaomi_remote_hid',['tests/test_xiaomi_remote_hid.c','main/gb_input.c','components/bluepad32/parser/uni_hid_parser.c','components/bluepad32/parser/uni_hid_parser_keyboard.c','components/bluepad32/controller/uni_gamepad.c','components/btstack/src/btstack_hid_parser.c','components/btstack/src/btstack_util.c'],[]),
 ]
 results=[]
 for name,sources,args in cases:
     exe=OUT/(name+('.exe' if os.name=='nt' else ''))
     extra=[]
-    if name in ('bt_le_advertisement','bt_le_hid','bt_le_recovery','gb_gamepad_hid','gb_keyboard_hid','iine_protocol','bt_le_iine'):
+    if name in ('bt_le_advertisement','bt_le_hid','bt_le_recovery','gb_gamepad_hid','gb_keyboard_hid','xiaomi_remote_hid','iine_protocol','bt_le_iine'):
         extra+=['-Werror','-Icomponents/bluepad32/include']
-    if name in ('bt_le_recovery','gb_gamepad_hid','gb_keyboard_hid','bt_le_iine'):
+    if name in ('bt_le_recovery','gb_gamepad_hid','gb_keyboard_hid','xiaomi_remote_hid','bt_le_iine'):
         extra+=['-Itests/keyboard_stubs','-Icomponents/btstack/src']
     if name in ('bt_le_recovery','bt_le_iine'):
         extra+=['-DCONFIG_BLUEPAD32_MAX_DEVICES=1']
@@ -62,7 +63,7 @@ for name,sources,args in cases:
             log.write(str(e)); passed=False
     results.append({'name':name,'passed':passed})
     print(name, 'PASS' if passed else 'FAIL',flush=True)
-for name in ('fc_web','fc_format_parity','fc_upload_http','home_menu'):
+for name in ('fc_web','fc_format_parity','fc_upload_http','home_menu','menu_navigation'):
     with (OUT/(name+'.log')).open('w',encoding='utf-8') as log:
         try:
             subprocess.run([sys.executable,str(ROOT/'tests'/('test_'+name+'.py'))],
