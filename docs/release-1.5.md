@@ -19,6 +19,8 @@
 
 ## 初始 1.5 全新烧录历史
 
+后续源码同步：用户明确授权后，47 份源码、测试与文档（含[中文表单文案](release-1.5-form.md)/[English](release-1.5-form.en.md)）已提交并推送 main，提交 [00c18a3](https://github.com/PhoenixZHC/folotoy-fc/commit/00c18a3493a47184d07587ed5eb1bdde9ec0cdc9)，本地与远端哈希一致。下文及上述交付段“未提交/推送”保留各自交付时点；本次源码推送未上传完整 BIN、ROM、ELF/MAP、存档或日志，未重新编译或烧录，也未创建固件 Release。
+
 以下保留初始 1.5 完整包及启动证据；这些旧包不含后来发现并修复的 RC001 报告问题和菜单入口问题，不能代替上述当前交付。
 
 [English](release-1.5.en.md) · [横握映射与实机检查](xiaomi-remote.md)。

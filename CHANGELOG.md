@@ -2,6 +2,8 @@
 
 ## 1.5（2026-10-14，十六游戏版已烧录 / sixteen-game build flashed）
 
+- 用户后续授权源码同步：47 份源码、测试和文档已推送 main，提交 [00c18a3](https://github.com/PhoenixZHC/folotoy-fc/commit/00c18a3493a47184d07587ed5eb1bdde9ec0cdc9)，远端核验一致。中英文表单使用说明/更新日志已保存；游戏、完整固件和日志仅本地保留。
+- Subsequently, the user authorized a source push: 47 source, test and documentation files were pushed to main at [00c18a3](https://github.com/PhoenixZHC/folotoy-fc/commit/00c18a3493a47184d07587ed5eb1bdde9ec0cdc9), with the remote hash verified. Bilingual form instructions/changelogs are included; ROMs, full firmware and device logs remain local.
 - 当前菜单修复日常版完整 16 款 BIN 已交付复核，8 MiB、0x0 安装，组件/ELF/原 ROM 分区一致性通过；项目文档与 Obsidian 同步。本次未重新编译或烧录，完整安装会覆盖设备数据。详见 [完整交付](docs/release-1.5.md)。
 - The current production menu-fix sixteen-game full image passed delivery revalidation (8 MiB, installation at 0x0), including component/ELF/original-ROM identity checks. Documents and Obsidian were synchronized. No rebuild or flash was performed this delivery; complete installation replaces device data. See [full delivery](docs/release-1.5.en.md).
 - 最新修复主页入口：已连接显示“游戏列表”，断开显示“连接手柄”；列表入页及游戏返回建立当前持键基线，避免直接启动首个游戏。26 组主机通过、0 失败，用户反馈菜单“测试通过”。COM14 仅更新应用，保留 16 款游戏、存档、设置和配对；当前诊断开关关闭，启动身份校验通过，串口已释放。见 [菜单修复记录](docs/menu-entry-fix.md)。

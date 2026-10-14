@@ -17,6 +17,8 @@ COM14 previously received only this app at 0x10000, preserving games, saves, set
 
 ## Initial complete-flash history
 
+Subsequent source synchronization: the user authorized committing and pushing 47 source, test and documentation files, including the [English form text](release-1.5-form.en.md)/[中文](release-1.5-form.md), to main at [00c18a3](https://github.com/PhoenixZHC/folotoy-fc/commit/00c18a3493a47184d07587ed5eb1bdde9ec0cdc9). Local and remote hashes matched. Earlier “not committed/pushed” statements retain their original delivery timing. No full BIN, ROMs, ELF/MAP, saves or device logs were uploaded; no rebuild, flash or firmware Release was performed.
+
 The following preserves the initial image/startup evidence. Those images predate the subsequent RC001 and menu-entry fixes and are not the current delivery above.
 
 [中文](release-1.5.md) · [Remote mapping](xiaomi-remote.en.md).
