@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include "esp_err.h"
 #include "gb_pixels.h"
+#include "fc_video.h"
 #include "gamepad_test.h"
 
 esp_err_t gb_display_init(void);
@@ -20,7 +21,7 @@ esp_err_t gb_display_lines(const char *const *lines, size_t count);
 esp_err_t gb_display_game_hint(const char *text);
 esp_err_t gb_display_footer(const char *text, uint32_t scroll_px);
 
-#define GB_UI_MAX_ITEMS 5
+#define GB_UI_MAX_ITEMS 6
 typedef struct {
     const char *title;
     const char *hint;
@@ -36,6 +37,7 @@ esp_err_t gb_display_ui(const gb_ui_model_t *model);
 esp_err_t gb_display_gamepad_test(const gamepad_test_state_t *state, uint32_t now, int battery);
 
 esp_err_t fc_display_launch_frame(uint32_t elapsed_ms);
+esp_err_t fc_display_set_orientation(uint8_t orientation);
 esp_err_t fc_display_frame(uint8_t *const *frame, const uint16_t *palette);
 // 提交后，直到 idle 为 true 或 drain 返回前，不得改写/释放 frame 和 palette。
 esp_err_t fc_display_idle(bool *idle);

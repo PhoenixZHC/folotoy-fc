@@ -34,6 +34,10 @@ static bool s_saves_ready;
 static uint8_t s_volume = 60;
 static uint8_t s_brightness = 80;
 static bool s_sound_enabled = true;
+static uint8_t s_default_orientation;
+static uint8_t s_game_orientation;
+static const char *const s_orientation_defaults[] = {"默认游戏 竖屏", "默认游戏 横屏", "默认 横屏翻转"};
+static const char *const s_orientation_actions[] = {"切换为横屏", "切换横屏翻转", "切换为竖屏"};
 typedef struct { bsp_btn_t button; bsp_btn_ev_t event; } button_message_t;
 
 static void button_callback(bsp_btn_t button, bsp_btn_ev_t event, void *user) {
@@ -70,6 +74,8 @@ static void settings_load(void) {
     if (nvs_get_u8(handle, "volume", &value) == ESP_OK && value <= 100) s_volume = value;
     if (nvs_get_u8(handle, "bright", &value) == ESP_OK && value <= 100) s_brightness = value;
     if (nvs_get_u8(handle, "sound", &value) == ESP_OK && value <= 1) s_sound_enabled = value != 0;
+    // 保留已有键及0/1含义，2为横屏翻转，升级不会丢失原方向设置。
+    if (nvs_get_u8(handle, "landscape", &value) == ESP_OK && value < FC_VIDEO_COUNT) s_default_orientation = value;
     nvs_close(handle);
 }
 
@@ -80,6 +86,7 @@ static bool settings_save(void) {
     if (e == ESP_OK) e = nvs_set_u8(handle, "volume", s_volume);
     if (e == ESP_OK) e = nvs_set_u8(handle, "bright", s_brightness);
     if (e == ESP_OK) e = nvs_set_u8(handle, "sound", s_sound_enabled ? 1 : 0);
+    if (e == ESP_OK) e = nvs_set_u8(handle, "landscape", s_default_orientation);
     if (e == ESP_OK) e = nvs_commit(handle);
     nvs_close(handle);
     if (e != ESP_OK) ESP_LOGE(TAG, "settings save: %s", esp_err_to_name(e));
@@ -140,7 +147,7 @@ static void settings_loop(void) {
     gb_select_pause_init(&select_back, gamepad_snapshot());
     const char *version = esp_app_get_description()->version;
     size_t selected = 0;
-    bool editing = false, dirty = true;
+    bool editing = false, dirty = true, save_failed = false;
     gb_menu_input_t pad_input;
     gb_menu_input_init(&pad_input, gamepad_snapshot());
     int64_t refreshed = 0;
@@ -173,11 +180,21 @@ static void settings_loop(void) {
                     editing = false;
                     settings_save();
                 }
-            } else if (action == GB_MENU_UP) selected = (selected + 3) % 4;
-            else if (action == GB_MENU_DOWN) selected = (selected + 1) % 4;
+            } else if (action == GB_MENU_UP) selected = (selected + 4) % 5;
+            else if (action == GB_MENU_DOWN) selected = (selected + 1) % 5;
             else if (action == GB_MENU_CONFIRM) {
-                if (selected == 3) return;
+                if (selected == 4) return;
                 if (selected == 2) { s_sound_enabled = !s_sound_enabled; settings_save(); }
+                else if (selected == 3) {
+                    uint8_t previous = s_default_orientation;
+                    s_default_orientation = (s_default_orientation + 1) % FC_VIDEO_COUNT;
+                    save_failed = !settings_save();
+                    if (save_failed) {
+                        s_default_orientation = previous;
+                        ESP_LOGE(TAG, "default orientation save failed");
+                    }
+                    else ESP_LOGI(TAG, "default game orientation: %u", s_default_orientation);
+                }
                 else editing = true;
             }
             dirty = true;
@@ -192,9 +209,11 @@ static void settings_loop(void) {
             snprintf(sound, sizeof(sound), "声音 %s", s_sound_enabled ? "开" : "关");
             snprintf(version_hint, sizeof(version_hint), "版本 %s%s", version,
                      editing ? " 调整中" : "");
-            const char *items[] = {vol, bright, sound, "返回"};
+            if (save_failed) snprintf(version_hint, sizeof(version_hint), "方向保存失败 请重试");
+            const char *items[] = {vol, bright, sound,
+                s_orientation_defaults[s_default_orientation], "返回"};
             show_ui("设置", version_hint,
-                    items, 4, selected, footer);
+                    items, 5, selected, footer);
             refreshed = now;
             if (dirty) footer_started = now;
             dirty = false;
@@ -345,11 +364,12 @@ static bool pause_game(gb_session_t *session, const uint8_t hash[32], bool conne
     gamepad_set_gameplay(false);
     bool battery = gb_port_has_battery(session);
     const char *items[] = {"继续游戏", battery ? "同步电池存档" : "无电池存档",
-                           "设置", "息屏", "退出游戏"};
+                           "设置", "息屏", "退出游戏",
+                           s_orientation_actions[s_game_orientation]};
     const char *hint = battery ? "游戏内存档，重进后读取" : "此游戏无电池存档";
     if (!gb_saves_write(session, hash)) hint = "同步失败，进度仅在内存";
     size_t selected = 0;
-    show_ui(connected ? "游戏暂停" : "输入设备断开", hint, items, 5, selected,
+    show_ui(connected ? "游戏暂停" : "输入设备断开", hint, items, 6, selected,
             "上/下选择 OK确认");
     button_message_t msg;
     gb_menu_input_t pad_input;
@@ -366,8 +386,8 @@ static bool pause_game(gb_session_t *session, const uint8_t hash[32], bool conne
         } else {
             if (action == GB_MENU_NONE) action = pad_action;
             if (action != GB_MENU_NONE) redraw = true;
-            if (action == GB_MENU_UP) selected = (selected + 4) % 5;
-            else if (action == GB_MENU_DOWN) selected = (selected + 1) % 5;
+            if (action == GB_MENU_UP) selected = (selected + 5) % 6;
+            else if (action == GB_MENU_DOWN) selected = (selected + 1) % 6;
             else if (action == GB_MENU_BACK) {
                 if (pad.connected) return true;
                 hint = "请重新连接输入设备";
@@ -391,6 +411,11 @@ static bool pause_game(gb_session_t *session, const uint8_t hash[32], bool conne
                     else hint = "请重新连接输入设备";
                     gb_select_pause_init(&select_back, gamepad_snapshot());
                     gb_menu_input_init(&pad_input, gamepad_snapshot());
+                } else if (selected == 5) {
+                    s_game_orientation = (s_game_orientation + 1) % FC_VIDEO_COUNT;
+                    items[5] = s_orientation_actions[s_game_orientation];
+                    hint = "继续游戏后生效";
+                    ESP_LOGI(TAG, "game orientation: %u", s_game_orientation);
                 } else {
                     if (gb_saves_write(session, hash)) return false;
                     hint = "同步失败，进度仅在内存";
@@ -402,7 +427,7 @@ static bool pause_game(gb_session_t *session, const uint8_t hash[32], bool conne
         connected = now_connected;
         if (!redraw) continue;
         show_ui(connected ? "游戏暂停" : "输入设备断开",
-                selected == 3 ? "任意按键唤醒" : hint, items, 5, selected,
+                selected == 3 ? "任意按键唤醒" : hint, items, 6, selected,
                 "上/下选择 OK确认");
     }
 }
@@ -538,8 +563,9 @@ static bool pairing_loop(void) {
 }
 
 static bool prepare_game_screen(void) {
-    esp_err_t e = gb_display_clear(GB_LCD_LIGHT);
-    if (e == ESP_OK) e = gb_display_game_hint("长按OK/Select 暂停");
+    esp_err_t e = fc_display_set_orientation(s_game_orientation);
+    if (e == ESP_OK) e = gb_display_clear(s_game_orientation ? 0x0000 : GB_LCD_LIGHT);
+    if (e == ESP_OK && !s_game_orientation) e = gb_display_game_hint("长按OK/Select 暂停");
     if (e != ESP_OK) ESP_LOGE(TAG, "game screen: %s", esp_err_to_name(e));
     return e == ESP_OK;
 }
@@ -568,6 +594,7 @@ static void destroy_game_session(gb_session_t *session) {
 static void run_game(size_t index) {
     const gb_rom_entry_t *entry = gb_storage_entry(index);
     if (!entry) return;
+    s_game_orientation = s_default_orientation;
     const char *loading[] = {entry->name};
     show_ui("加载游戏", "正在检查游戏", loading, 1, 0, "请稍候");
     gb_rom_source_t rom;

@@ -58,6 +58,14 @@
 #include "gap.h"
 #include "ble/gatt_service_client.h"
 
+#ifdef FC_HID_TRACE
+#include <stdio.h>
+// Initialization metadata only; no input reports, pairing keys or protocol changes.
+#define HID_TRACE(...) do { printf("HID_TRACE "); printf(__VA_ARGS__); printf("\n"); } while (0)
+#else
+#define HID_TRACE(...) do { } while (0)
+#endif
+
 #define HID_REPORT_MODE_REPORT_ID               3
 #define HID_REPORT_MODE_REPORT_MAP_ID           4
 #define HID_REPORT_MODE_HID_INFORMATION_ID      5
@@ -677,6 +685,9 @@ static void hids_run_for_client(hids_client_t * client){
     gatt_client_service_t service;
     gatt_client_characteristic_t characteristic;
 
+    HID_TRACE("run cid=%u state=%u service=%u report=%u", client->cid,
+              (unsigned)client->state, client->service_index, client->report_index);
+
     switch (client->state){
         case HIDS_CLIENT_STATE_W2_QUERY_SERVICE:
 #ifdef ENABLE_TESTING_SUPPORT
@@ -686,6 +697,7 @@ static void hids_run_for_client(hids_client_t * client){
             
             // result in GATT_EVENT_SERVICE_QUERY_RESULT
             att_status = gatt_client_discover_primary_services_by_uuid16(handle_gatt_client_event, client->con_handle, ORG_BLUETOOTH_SERVICE_HUMAN_INTERFACE_DEVICE);
+            HID_TRACE("request cid=%u wait_state=%u status=%02x", client->cid, (unsigned)client->state, att_status);
             UNUSED(att_status);
             break;
         
@@ -701,6 +713,7 @@ static void hids_run_for_client(hids_client_t * client){
             // result in GATT_EVENT_CHARACTERISTIC_QUERY_RESULT
             att_status = gatt_client_discover_characteristics_for_service(&handle_gatt_client_event, client->con_handle, &service);
             
+            HID_TRACE("request cid=%u wait_state=%u status=%02x", client->cid, (unsigned)client->state, att_status);
             UNUSED(att_status);
             break;
 
@@ -712,6 +725,7 @@ static void hids_run_for_client(hids_client_t * client){
 
             // result in GATT_EVENT_LONG_CHARACTERISTIC_VALUE_QUERY_RESULT
             att_status = gatt_client_read_long_value_of_characteristic_using_value_handle(&handle_gatt_client_event, client->con_handle, client->services[client->service_index].report_map_value_handle);
+            HID_TRACE("request cid=%u wait_state=%u status=%02x", client->cid, (unsigned)client->state, att_status);
             UNUSED(att_status);
             break;
 
@@ -726,6 +740,7 @@ static void hids_run_for_client(hids_client_t * client){
 
             // result in GATT_EVENT_ALL_CHARACTERISTIC_DESCRIPTORS_QUERY_RESULT
             att_status = gatt_client_discover_characteristic_descriptors(&handle_gatt_client_event, client->con_handle, &characteristic);
+            HID_TRACE("request cid=%u wait_state=%u status=%02x", client->cid, (unsigned)client->state, att_status);
             UNUSED(att_status);
             break;
 
@@ -737,6 +752,7 @@ static void hids_run_for_client(hids_client_t * client){
             
             // result in GATT_EVENT_CHARACTERISTIC_DESCRIPTOR_QUERY_RESULT
             att_status = gatt_client_read_characteristic_descriptor_using_descriptor_handle(&handle_gatt_client_event, client->con_handle, client->external_reports[client->report_index].value_handle);  
+            HID_TRACE("request cid=%u wait_state=%u status=%02x", client->cid, (unsigned)client->state, att_status);
             UNUSED(att_status);
             break;
 
@@ -751,6 +767,7 @@ static void hids_run_for_client(hids_client_t * client){
 
             // Result in GATT_EVENT_CHARACTERISTIC_QUERY_RESULT
             att_status = gatt_client_discover_characteristics_for_service(&handle_gatt_client_event, client->con_handle, &service);
+            HID_TRACE("request cid=%u wait_state=%u status=%02x", client->cid, (unsigned)client->state, att_status);
             UNUSED(att_status);
             break;
 
@@ -770,6 +787,7 @@ static void hids_run_for_client(hids_client_t * client){
 
             // result in GATT_EVENT_ALL_CHARACTERISTIC_DESCRIPTORS_QUERY_RESULT
             att_status = gatt_client_discover_characteristic_descriptors(&handle_gatt_client_event, client->con_handle, &characteristic);
+            HID_TRACE("request cid=%u wait_state=%u status=%02x", client->cid, (unsigned)client->state, att_status);
             UNUSED(att_status);
             break;
 
@@ -779,6 +797,7 @@ static void hids_run_for_client(hids_client_t * client){
             // result in GATT_EVENT_CHARACTERISTIC_DESCRIPTOR_QUERY_RESULT
             att_status = gatt_client_read_characteristic_descriptor_using_descriptor_handle(&handle_gatt_client_event, client->con_handle, client->handle);  
             client->handle = 0;  
+            HID_TRACE("request cid=%u wait_state=%u status=%02x", client->cid, (unsigned)client->state, att_status);
             UNUSED(att_status);
             break;
         
@@ -803,6 +822,8 @@ static void hids_run_for_client(hids_client_t * client){
             // end of write marked in GATT_EVENT_QUERY_COMPLETE
 
             att_status = gatt_client_write_client_characteristic_configuration(&handle_gatt_client_event, client->con_handle, &characteristic, client->value);
+            HID_TRACE("notify-config cid=%u handle=%04x status=%02x", client->cid,
+                      characteristic.value_handle, att_status);
             
             if (att_status == ERROR_CODE_SUCCESS){
                 switch(client->value){
@@ -838,6 +859,8 @@ static void hids_run_for_client(hids_client_t * client){
             
             // end of write marked in GATT_EVENT_QUERY_COMPLETE
             att_status = gatt_client_write_client_characteristic_configuration(&handle_gatt_client_event, client->con_handle, &characteristic, GATT_CLIENT_CHARACTERISTICS_CONFIGURATION_NOTIFICATION);
+            HID_TRACE("enable-input cid=%u handle=%04x status=%02x", client->cid,
+                      characteristic.value_handle, att_status);
             
             if (att_status == ERROR_CODE_SUCCESS){
                 gatt_client_listen_for_characteristic_value_updates(
@@ -868,6 +891,7 @@ static void hids_run_for_client(hids_client_t * client){
                 &handle_gatt_client_event, client->con_handle,
                 client->reports[client->report_index].value_handle, 
                 client->report_len, (uint8_t *)client->report);
+            HID_TRACE("request cid=%u wait_state=%u status=%02x", client->cid, (unsigned)client->state, att_status);
             UNUSED(att_status);
             break;
 
@@ -885,6 +909,7 @@ static void hids_run_for_client(hids_client_t * client){
                 &handle_report_event,
                 client->con_handle, 
                 client->reports[client->report_index].value_handle);
+            HID_TRACE("request cid=%u wait_state=%u status=%02x", client->cid, (unsigned)client->state, att_status);
             UNUSED(att_status);
             break;        
 
@@ -1020,6 +1045,9 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
             if (client == NULL) break;
 
             gatt_event_characteristic_query_result_get_characteristic(packet, &characteristic);
+            HID_TRACE("characteristic cid=%u uuid=%04x value=%04x end=%04x properties=%02x",
+                      client->cid, characteristic.uuid16, characteristic.value_handle,
+                      characteristic.end_handle, characteristic.properties);
             
             report_index = HIDS_CLIENT_INVALID_REPORT_INDEX;
             if (client->state == HIDS_CLIENT_STATE_W4_EXTERNAL_REPORT_CHARACTERISTIC_RESULT){
@@ -1091,6 +1119,8 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
             
             value = gatt_event_long_characteristic_value_query_result_get_value(packet);
             value_len = gatt_event_long_characteristic_value_query_result_get_value_length(packet);
+            HID_TRACE("report-map cid=%u offset=%u length=%u", client->cid,
+                      gatt_event_long_characteristic_value_query_result_get_value_offset(packet), value_len);
 
 #ifdef ENABLE_TESTING_SUPPORT
             // printf("Report Map HID Desc [%d] for service %d\n", descriptor_len, client->service_index);
@@ -1110,6 +1140,8 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
             if (client == NULL) break;
 
             gatt_event_all_characteristic_descriptors_query_result_get_characteristic_descriptor(packet, &characteristic_descriptor);
+            HID_TRACE("descriptor cid=%u uuid=%04x handle=%04x", client->cid,
+                      characteristic_descriptor.uuid16, characteristic_descriptor.handle);
             
             switch (client->state) {
                 case HIDS_CLIENT_STATE_W4_REPORT_MAP_CHARACTERISTIC_DESCRIPTORS_RESULT:
@@ -1232,6 +1264,10 @@ static void handle_gatt_client_event(uint8_t packet_type, uint16_t channel, uint
             if (client == NULL) break;
             
             status = gatt_client_att_status_to_error_code(gatt_event_query_complete_get_att_status(packet));
+            HID_TRACE("complete cid=%u state=%u att=%02x status=%02x services=%u reports=%u",
+                      client->cid, (unsigned)client->state,
+                      gatt_event_query_complete_get_att_status(packet), status,
+                      client->num_instances, client->num_reports);
             
             switch (client->state){
                 case HIDS_CLIENT_STATE_W4_SERVICE_RESULT:

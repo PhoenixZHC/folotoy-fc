@@ -1,5 +1,7 @@
 # FC 1.5 full image delivery with sixteen games (2026-10-14)
 
+Historical release. See [FC1.6](release-1.6.en.md) for the latest package and test scope. Current below refers to the recorded historical date.
+
 ## Current production delivery
 
 Image: `deliverables/FC-1.5-menu-entry-fix-16games/FC-1.5-menu-entry-fix-16games-full.bin`, **8,388,608 bytes (8 MiB), complete installation at 0x0**.

@@ -14,6 +14,7 @@ CORE+=['mappers/map'+n+'.c' for n in ('000','001','002','003','004','007','023',
 CORE+=['nofrendo.c']
 core_sources=['components/nofrendo/'+s for s in CORE]
 cases=[
+ ('fc_video',['tests/test_fc_video.c'],[]),
  ('fc_rom',['tests/test_fc_rom.c','main/fc_rom.c'],[]),
  ('fc_nes2_diagnostic',['tests/test_fc_nes2_diagnostic.c','main/fc_port.c','main/fc_rom.c',*core_sources],[str(OUT/'diagnostic-nes2.nes')]),
  ('gamepad_test',['tests/test_gamepad_test.c','main/gamepad_test.c'],[]),
@@ -63,7 +64,7 @@ for name,sources,args in cases:
             log.write(str(e)); passed=False
     results.append({'name':name,'passed':passed})
     print(name, 'PASS' if passed else 'FAIL',flush=True)
-for name in ('fc_web','fc_format_parity','fc_upload_http','home_menu','menu_navigation'):
+for name in ('fc_web','fc_format_parity','fc_upload_http','home_menu','menu_navigation','gatt_ccc_discovery','game_orientation'):
     with (OUT/(name+'.log')).open('w',encoding='utf-8') as log:
         try:
             subprocess.run([sys.executable,str(ROOT/'tests'/('test_'+name+'.py'))],

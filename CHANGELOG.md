@@ -1,5 +1,19 @@
 # 更新日志 / Changelog
 
+## 1.6 三方向完整交付（2026-10-19）
+
+- 增加仅游戏画面的竖屏、横屏、横屏翻转；全部菜单仍竖屏。暂停菜单切换当前方向，系统设置保存默认方向；用户确认全部专项测试通过。
+- 原16款完整包已核验，应用与COM13已验收版本一致；29组主机有效结果、7项打包通过。本次未再次烧录，旧包保留。见[交付](docs/release-1.6-orientation.md)。
+- Added portrait, landscape and flipped game views while keeping all menus portrait. Pause changes the current session; Settings persists the default. User acceptance passed. Verified16-game image matches the accepted COM13 application;29 host groups and7 packaging checks pass. No flash this delivery. [Details](docs/release-1.6-orientation.en.md).
+
+## 1.6（2026-10-19）
+
+- 修复 BLE CCC 分页发现覆盖待写通知状态、导致手柄初始化超时的问题；末尾缺失 CCC 明确返回错误。
+- Q36 D档连接/按键/回连通过用户验收；良值口袋手柄迷你与Pro的安卓/Xbox模式由用户确认正常。模式名称不等同于协议，Q36经典蓝牙X档仍不支持。
+- 27组主机通过、0失败（复用同功能代码结果），7项打包通过、0失败；构建与原16款完整包校验通过。1.6仅在已测修复版上更新版本/网页标识，未再烧录。见[交付](docs/release-1.6.md)。
+- Fixed paginated CCC discovery overwriting a pending notification write; missing CCC now terminates with an explicit error. Q36 Android and user-tested IINE Mini/Pro Android/Xbox modes work within the documented BLE scope.
+- 27 host groups pass (reused), 7 packaging tests pass (rerun), no failures. Built and verified the original sixteen-game full image. Physical tests used repaired1.5;1.6 updates version labels and has not been flashed. See [delivery](docs/release-1.6.en.md).
+
 ## 1.5（2026-10-14，十六游戏版已烧录 / sixteen-game build flashed）
 
 - 用户后续授权源码同步：47 份源码、测试和文档已推送 main，提交 [00c18a3](https://github.com/PhoenixZHC/folotoy-fc/commit/00c18a3493a47184d07587ed5eb1bdde9ec0cdc9)，远端核验一致。中英文表单使用说明/更新日志已保存；游戏、完整固件和日志仅本地保留。

@@ -1,5 +1,7 @@
 # FC 1.5 form text
 
+Historical1.5 text; use the [1.6 instructions and changelog](release-1.6-form.en.md) for the current release.
+
 [中文](release-1.5-form.md). For the current production menu repair; exact firmware identities are in the [full delivery](release-1.5.en.md).
 
 ## English instructions

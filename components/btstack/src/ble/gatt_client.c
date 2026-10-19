@@ -63,6 +63,10 @@
 #include "bluetooth_sdp.h"
 #include "classic/sdp_util.h"
 
+#ifdef FC_HID_TRACE
+#include <stdio.h>
+#endif
+
 #if defined(ENABLE_GATT_OVER_EATT) && !defined(ENABLE_L2CAP_ENHANCED_CREDIT_BASED_FLOW_CONTROL_MODE)
 #error "GATT Over EATT requires support for L2CAP Enhanced CoC. Please enable ENABLE_L2CAP_ENHANCED_CREDIT_BASED_FLOW_CONTROL_MODE"
 #endif
@@ -2130,6 +2134,11 @@ static void gatt_client_handle_att_response(gatt_client_t * gatt_client, uint8_t
 #ifdef ENABLE_GATT_FIND_INFORMATION_FOR_CCC_DISCOVERY
             log_info("ENABLE_GATT_FIND_INFORMATION_FOR_CCC_DISCOVERY, state %x", gatt_client->state);
             if (gatt_client->state == P_W4_FIND_CLIENT_CHARACTERISTIC_CONFIGURATION_QUERY_RESULT){
+#ifdef FC_HID_TRACE
+                printf("HID_TRACE CCC-reply start=%04x end=%04x last=%04x pairs=%u\n",
+                       gatt_client->start_group_handle, gatt_client->end_group_handle,
+                       last_descriptor_handle, (unsigned)((size - 2u) / pair_size));
+#endif
                 // iterate over descriptors looking for CCC
                 if (pair_size == 4){
                     while ((offset + 4) <= size){
@@ -2143,8 +2152,12 @@ static void gatt_client_handle_att_response(gatt_client_t * gatt_client, uint8_t
                         offset += pair_size;
                     }
                 }
+                // Keep the scheduled write even when CCC is not the final descriptor.
+                if (gatt_client->state == P_W2_WRITE_CLIENT_CHARACTERISTIC_CONFIGURATION){
+                    break;
+                }
                 if (is_query_done(gatt_client, last_descriptor_handle)){
-
+                    gatt_client_handle_transaction_complete(gatt_client, ATT_ERROR_ATTRIBUTE_NOT_FOUND);
                 } else {
                     // next
                     gatt_client->start_group_handle = last_descriptor_handle + 1;

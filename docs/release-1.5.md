@@ -1,5 +1,7 @@
 # FC 1.5 十六游戏完整包交付（2026-10-14）
 
+历史版本记录。最新完整包与实测范围见 [FC1.6](release-1.6.md)。下文“当前”仅指2026-10-14。
+
 ## 当前交付：菜单修复日常版
 
 完整 BIN：`deliverables/FC-1.5-menu-entry-fix-16games/FC-1.5-menu-entry-fix-16games-full.bin`，**8,388,608 字节（8 MiB），完整安装地址 0x0**。

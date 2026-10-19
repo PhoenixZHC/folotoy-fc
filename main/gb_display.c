@@ -11,6 +11,7 @@
 #include "gb_pixels.h"
 #include "gb_port.h"
 #include "fc_launch.h"
+#include "fc_video.h"
 #include "ui_font.h"
 #include <ctype.h>
 #include <string.h>
@@ -30,6 +31,7 @@ static bool s_queued_fc;
 static uint8_t *const *s_fc_frame;
 static const uint16_t *s_fc_palette;
 static atomic_uint s_fc_completed;
+static uint8_t s_fc_orientation;
 static esp_err_t fc_draw(uint8_t *const *frame, const uint16_t *palette);
 
 static esp_err_t wait_frame_idle(void) {
@@ -483,18 +485,21 @@ esp_err_t gb_display_ui(const gb_ui_model_t *model) {
             ui_text(row, rows, 180, 24, 239, level, ink);
         } else ui_text(row, rows, 209, 24, 239, "?", ink);
         for (size_t i = 0; i < model->count; i++) {
-            int y = 54 + (int)i * 42;
+            int spacing = model->count > 5 ? 34 : 42;
+            int height = spacing - 5;
+            int y = 54 + (int)i * spacing;
             bool active = !model->compact && i == model->selected;
-            ui_fill(row, rows, 10, y, 220, 37, active ? ink : mid);
-            ui_frame(row, rows, 10, y, 220, 37, 2, active ? ink : shade);
+            ui_fill(row, rows, 10, y, 220, height, active ? ink : mid);
+            ui_frame(row, rows, 10, y, 220, height, 2, active ? ink : shade);
             if (model->compact) {
                 ui_fill(row, rows, 16, y + 15, 7, 7, ink);
                 ui_text_region(row, rows, 29, y + 10, 29, 224,
                                model->items[i], ink);
             } else {
-                ui_fill(row, rows, 17, y + 8, 20, 20, active ? paper : shade);
-                ui_text(row, rows, 21, y + 10, 36, active ? ">" : "-", active ? ink : paper);
-                ui_text(row, rows, 45, y + 10, 224, model->items[i], active ? paper : ink);
+                int inset = (height - 20) / 2;
+                ui_fill(row, rows, 17, y + inset, 20, 20, active ? paper : shade);
+                ui_text(row, rows, 21, y + inset + 2, 36, active ? ">" : "-", active ? ink : paper);
+                ui_text(row, rows, 45, y + inset + 2, 224, model->items[i], active ? paper : ink);
             }
         }
         ui_fill(row, rows, 9, 264, 222, 21, mid);
@@ -513,17 +518,24 @@ static esp_err_t fc_draw(uint8_t *const *frame, const uint16_t *palette) {
 
     uint16_t wire[64];
     for (int i=0;i<64;i++) wire[i]=__builtin_bswap16(palette[i]);
-    // 256x240 缩小为 240x225，完整保留四周画面，像素坐标固定可测。
-    for (int row=0; row<225; row+=STRIP_ROWS) {
-        int rows = 225-row < STRIP_ROWS ? 225-row : STRIP_ROWS;
+    const int height = fc_video_height(s_fc_orientation);
+    for (int row=0; row<height; row+=STRIP_ROWS) {
+        int rows = height-row < STRIP_ROWS ? height-row : STRIP_ROWS;
         for (int dy=0; dy<rows; dy++) {
-            const uint8_t *src = frame[(row+dy)*240/225] + 8;
-            for (int x=0; x<240; x++) s_strip[dy*240+x] = wire[src[x*256/240] & 63];
+            fc_video_row(frame, wire, row + dy, s_fc_orientation, s_strip + dy * 240);
         }
-        e=send_strip(0, 40+row, 240, rows);
+        e=send_strip(0, fc_video_top(s_fc_orientation)+row, 240, rows);
         if(e!=ESP_OK) return e;
     }
     return ESP_OK;
+}
+
+esp_err_t fc_display_set_orientation(uint8_t orientation) {
+    if (orientation >= FC_VIDEO_COUNT) return ESP_ERR_INVALID_ARG;
+    if (!s_ready) return ESP_ERR_INVALID_STATE;
+    esp_err_t e = wait_frame_idle();
+    if (e == ESP_OK) s_fc_orientation = orientation;
+    return e;
 }
 
 esp_err_t fc_display_frame(uint8_t *const *frame, const uint16_t *palette) {

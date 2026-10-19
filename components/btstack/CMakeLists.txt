@@ -75,3 +75,8 @@ idf_component_register(SRC_DIRS "${src_dirs}"
                     INCLUDE_DIRS "${include_dirs}"
                     PRIV_INCLUDE_DIRS "${priv_include_dirs}"
                     PRIV_REQUIRES ${priv_requires})
+
+option(FC_HID_TRACE "Trace HID initialization without changing protocol behavior" OFF)
+if(FC_HID_TRACE)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE FC_HID_TRACE=1)
+endif()
