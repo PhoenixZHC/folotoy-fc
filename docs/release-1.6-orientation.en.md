@@ -1,5 +1,7 @@
 # FC 1.6 three-orientation full image (2026-10-19)
 
+Subsequently, the user authorized pushing33 source, test and documentation files to main at[424c524](https://github.com/PhoenixZHC/folotoy-fc/commit/424c52445b7a460dca6b6d834a5d91b43d89e779). Remote and local hashes matched. Instructions/changelogs reflect the latest user edits. No binaries, ROMs, saves or raw logs were uploaded; no rebuild or flash was performed. No-push wording below describes the original packaging stage.
+
 [中文](release-1.6-orientation.md) · [Instructions](release-1.6-form.en.md)
 
 Only game pixels rotate. Modes are portrait (initial default), landscape and flipped landscape. All menus remain portrait. The sixth pause item changes the current session; the fourth Settings item saves the default across reboots. Hold the device counterclockwise for landscape and clockwise for flipped landscape.
